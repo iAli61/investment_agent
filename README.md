@@ -78,6 +78,7 @@ The application follows a modular architecture with several key components:
 - Python 3.9+
 - uv package manager (optional, recommended) or pip
 - Node.js 18+ (for frontend development only)
+- pytest-asyncio for running asynchronous tests
 
 ### Installation
 
@@ -107,6 +108,9 @@ Using pip:
 pip install -e .
 # Or with development dependencies
 pip install -e ".[dev]"
+
+# Make sure to install pytest-asyncio for async tests
+pip install pytest-asyncio
 ```
 
 3. Set up environment variables:
@@ -172,10 +176,11 @@ See the [Azure Deployment Guide](docs/azure-deployment.md) for detailed instruct
 investment_agent/
 ├── src/
 │   ├── ai_agents/            # AI agent implementations
-│   │   ├── base_agent.py     # Base agent class
+│   │   ├── base_agent.py     # Base agent class with common functionality
 │   │   ├── market_data_agent.py  # Market data collection agent
 │   │   ├── orchestrator.py   # Agent orchestration framework
-│   │   └── rent_estimation_agent.py  # Rent estimation agent
+│   │   ├── rent_estimation_agent.py  # Rent estimation agent
+│   │   └── tools.py          # Tool implementations for agents
 │   ├── backend/              # Backend API
 │   │   ├── api.py            # FastAPI implementation
 │   ├── database/             # Database models and connections
@@ -186,7 +191,8 @@ investment_agent/
 │   └── utils/                # Utility functions
 │       ├── financial_utils.py  # Financial calculation utilities
 ├── tests/                    # Test suites
-│   ├── unit/                 # Unit tests
+│   ├── unit/                 # Unit tests for individual components
+│   │   ├── ai_agents/        # Tests for AI agent functionality
 │   ├── integration/          # Integration tests
 │   └── e2e/                  # End-to-end tests
 ├── docker/                   # Docker configuration
@@ -205,24 +211,50 @@ investment_agent/
 
 ## AI Agent System
 
-The application uses a sophisticated AI agent system to enhance traditional financial calculations:
+The application uses a modular AI agent system with the following components:
 
-1. **Market Data Agent**: Collects real-time market data from multiple sources with confidence scoring
-2. **Rent Estimation Agent**: Uses LLM processing to estimate appropriate rental prices
-3. **Tax Regulation Agent**: Monitors and applies current tax regulations
-4. **Risk Assessment Agent**: Evaluates investment risks and opportunities
-5. **Document Analysis Agent**: Extracts key information from property documents
-6. **Optimization Agent**: Suggests improvements to maximize returns
+1. **Base Agent (BaseAgent)**: Provides core functionality including:
+   - Execution tracking with iteration count
+   - Input validation
+   - Logging and monitoring
+   - Error handling and recovery
+   - Result formatting
 
-The agents are coordinated through an orchestration layer that manages task queues, context sharing, and results aggregation.
+2. **Market Data Agent (MarketDataSearchAgent)**:
+   - Collects real estate market data for specific locations and property types
+   - Generates sample listings for analysis
+   - Calculates confidence levels for data reliability
+   - Supports different operations (buy/rent)
+
+3. **Rent Estimation Agent (RentEstimationAgent)**:
+   - Estimates rental prices based on property characteristics
+   - Uses market data to improve estimation accuracy
+   - Factors in property features and condition
+   - Calculates per square meter rental values
+
+4. **Agent Tools**:
+   - RealEstateSearchTool: Search for real estate listings
+   - MarketTrendTool: Analyze market trends
+   - RentEstimationTool: Estimate rental prices
+
+The orchestrator coordinates these agents to complete complex analytical tasks.
 
 ## Testing the Application
 
 ### Unit Tests
 Run unit tests with:
 ```bash
+# Install pytest-asyncio first if you haven't
+pip install pytest-asyncio
+
+# Run all unit tests
 pytest tests/unit
+
+# Run specific agent tests
+pytest tests/unit/ai_agents
 ```
+
+Note: The test suite is currently being expanded and updated to match the latest implementation. Some tests may fail due to API changes in progress.
 
 ### Integration Tests
 Run integration tests with:
@@ -235,6 +267,21 @@ Run end-to-end tests with:
 ```bash
 pytest tests/e2e
 ```
+
+## Development Status
+
+This project is currently in active development with the following components in progress:
+
+- AI Agent System: Core functionality implemented, refinements ongoing
+- Backend API: Basic endpoints implemented
+- Frontend: Initial Streamlit interface in development
+- Database: Schema defined, integration in progress
+
+Next development priorities:
+1. Complete and stabilize AI agent implementation
+2. Expand API functionality
+3. Enhance frontend user experience
+4. Implement comprehensive testing
 
 ## Contributing
 

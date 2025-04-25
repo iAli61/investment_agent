@@ -18,7 +18,7 @@ from langchain.chat_models import ChatOpenAI
 
 # Local imports
 from .base_agent import BaseAgent, LangChainAgent
-from .tools import create_real_estate_tools
+from .tools import create_real_estate_tools, RealEstateSearchTool, MarketTrendTool, RentEstimationTool
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -44,6 +44,7 @@ class MarketDataSearchAgent(BaseAgent):
             "Federal Statistical Office",
             "Regional Housing Market Reports"
         ]
+        self.default_data_source = "primary_db"
     
     def _get_agent_name(self) -> str:
         """Get the name of the agent"""
@@ -61,68 +62,92 @@ class MarketDataSearchAgent(BaseAgent):
             parameters: Dictionary containing:
                 - location: str - The location to search for (city/district)
                 - property_type: str - The type of property (apartment, house, etc.)
-                - additional_filters: Dict[str, Any] - Additional search filters
+                - operation: str - Operation type (buy, rent)
+                - data_source: str - Data source to use (optional)
+                - search_params: Dict[str, Any] - Additional search parameters
             context: Shared context from the orchestrator
             
         Returns:
             Dictionary containing market data results
         """
-        if not await self.validate_input(parameters):
-            logger.error("Invalid input parameters for market data search")
-            return {"error": "Invalid input parameters", "success": False}
-        
         try:
+            # Validate the input parameters first
+            validation_result = await self.validate_input(parameters)
+            
+            if not validation_result:
+                logger.error("Invalid input parameters for market data search")
+                return {
+                    "success": False,
+                    "error": "Invalid input parameters",
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+            
             # Get parameters
             location = parameters.get("location", "")
             property_type = parameters.get("property_type", "")
-            additional_filters = parameters.get("additional_filters", {})
+            operation = parameters.get("operation", "buy")
+            data_source = parameters.get("data_source", self.default_data_source)
+            search_params = parameters.get("search_params", None)
             
             # In a real implementation, this would make API calls to real estate data sources
             # or use web scraping to gather market data
             
             # For this demo, we'll simulate the process with realistic mock data
-            await asyncio.sleep(2)  # Simulate API call delay
+            await asyncio.sleep(1)  # Simulate API call delay
             
             # Get market data
-            market_data, sources_used = self._generate_market_data(location, property_type, additional_filters)
+            market_data = self._get_market_data(location, property_type, operation, data_source, search_params)
             
-            # Calculate confidence level
-            confidence_level = self.get_confidence_level({
-                "num_sources": len(sources_used),
-                "data_completeness": 0.85,  # Simulated completeness score
-                "property_type_match": True,
-                "location_specificity": 0.9  # Simulated location match score
-            })
+            # Generate listings based on parameters
+            listings = self._generate_listings(location, property_type, operation, search_params)
             
-            return {
+            # Get price trends
+            price_trends = self._get_price_trends(location, property_type, operation)
+            
+            # Calculate confidence scores
+            confidence_scores = self._get_confidence_scores(location, property_type, data_source, len(listings))
+            
+            # Put together the full result
+            result = {
                 "success": True,
-                "data": market_data,
-                "sources": sources_used,
-                "confidence_level": confidence_level,
+                "location": location,
+                "property_type": property_type,
+                "operation": operation,
+                "data_source": data_source,
+                "search_params": search_params,
+                "market_data": market_data,
+                "listings": listings,
+                "price_trends": price_trends,
+                "confidence_scores": confidence_scores,
                 "timestamp": datetime.datetime.now().isoformat()
             }
             
+            return result
+            
         except Exception as e:
             logger.error(f"Error in market data search: {str(e)}")
-            return {"error": str(e), "success": False}
+            return {
+                "success": False,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "timestamp": datetime.datetime.now().isoformat()
+            }
     
-    def _generate_market_data(self, location: str, property_type: str, 
-                             filters: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+    def _get_market_data(self, location: str, property_type: str, operation: str,
+                        data_source: str, search_params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Generate market data for the given parameters
+        Get market data from the specified data source
         
         Args:
             location: Location to search for
             property_type: Type of property
-            filters: Additional filters
+            operation: Operation type (buy, rent)
+            data_source: Data source to use
+            search_params: Additional search parameters
             
         Returns:
-            Tuple of (market_data_dict, sources_used_list)
+            Dictionary with market data
         """
-        # Select random data sources to simulate varied data availability
-        num_sources = random.randint(3, len(self.data_sources))
-        sources_used = random.sample(self.data_sources, num_sources)
-        
         # Base values - would be retrieved from real data sources in production
         base_values = {
             "apartment": {
@@ -173,19 +198,52 @@ class MarketDataSearchAgent(BaseAgent):
         avg_rent_sqm = base_data["rent"] * rent_variance
         vacancy_rate = base_data["vacancy"] * vacancy_variance
         
-        # Apply additional filters if they affect the data
-        if "min_size_sqm" in filters and "max_size_sqm" in filters:
+        # Apply data source factor - some sources might have higher/lower estimates
+        source_factors = {
+            "primary_db": 1.0,
+            "real_estate_portal": 1.05,
+            "government_data": 0.95,
+            "market_analysis": 1.02
+        }
+        
+        source_factor = source_factors.get(data_source, 1.0)
+        avg_price_sqm *= source_factor
+        avg_rent_sqm *= source_factor
+        
+        # Apply search params if provided
+        if search_params:
             # Size range might affect average prices slightly
-            size_factor = (filters["min_size_sqm"] + filters["max_size_sqm"]) / 200
-            avg_price_sqm *= max(0.9, min(1.1, size_factor))
-            avg_rent_sqm *= max(0.9, min(1.1, size_factor))
+            if "size_range" in search_params:
+                size_range = search_params["size_range"]
+                min_size = size_range.get("min", 0)
+                max_size = size_range.get("max", 200)
+                size_factor = (min_size + max_size) / 200
+                avg_price_sqm *= max(0.9, min(1.1, size_factor))
+                avg_rent_sqm *= max(0.9, min(1.1, size_factor))
+            
+            # Features might affect prices
+            if "features" in search_params:
+                features = search_params["features"]
+                feature_premium = len(features) * 0.02  # 2% premium per feature
+                avg_price_sqm *= (1 + feature_premium)
+                avg_rent_sqm *= (1 + feature_premium)
         
         # Formulate trend predictions
         price_trend = random.choice(["increasing", "stable", "slightly increasing", "rapidly increasing"])
         rent_trend = random.choice(["increasing", "stable", "slightly increasing", "rapidly increasing"])
         
-        # Create listing samples
-        listings = self._generate_sample_listings(location, property_type, avg_price_sqm, avg_rent_sqm)
+        # Select random data sources to simulate varied data availability
+        num_sources = random.randint(3, len(self.data_sources))
+        sources_used = random.sample(self.data_sources, num_sources)
+        
+        # Calculate rental yield
+        rental_yield = (avg_rent_sqm * 12) / avg_price_sqm * 100 if avg_price_sqm > 0 else 0
+        
+        # Generate sample listings for current listings
+        current_listings = self._generate_listings(location, property_type, operation, search_params)
+        
+        # Get price trends data
+        price_trends = self._get_price_trends(location, property_type, operation)
         
         # Compile market data
         market_data = {
@@ -196,62 +254,265 @@ class MarketDataSearchAgent(BaseAgent):
             "vacancy_rate": round(vacancy_rate, 4),
             "price_trend": price_trend,
             "rent_trend": rent_trend,
+            "rental_yield": round(rental_yield, 2),
             "price_to_rent_ratio": round(avg_price_sqm / avg_rent_sqm, 2) if avg_rent_sqm > 0 else 0,
-            "sample_listings": listings,
-            "last_updated": datetime.datetime.now().isoformat(),
-            "sources": sources_used
+            "current_listings": current_listings,
+            "price_trends": price_trends,
+            "time_on_market": random.randint(30, 90),
+            "last_updated": datetime.datetime.now().isoformat()
         }
         
-        return market_data, sources_used
+        # Add operation-specific data
+        if operation == "rent":
+            market_data["rental_demand"] = random.choice(["high", "medium", "very high"])
+            market_data["avg_days_on_market"] = random.randint(20, 60)
+            
+        elif operation == "buy":
+            market_data["price_per_income"] = round(random.uniform(8, 15), 2)
+            market_data["avg_days_on_market"] = random.randint(30, 90)
+            
+        return market_data
     
-    def _generate_sample_listings(self, location: str, property_type: str, 
-                                 avg_price_sqm: float, avg_rent_sqm: float) -> List[Dict[str, Any]]:
+    def _generate_listings(self, location: str, property_type: str, operation: str, 
+                         search_params: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Generate sample property listings to support market data
+        Generate property listings based on the search parameters
         
         Args:
             location: Location of properties
             property_type: Type of property
-            avg_price_sqm: Average price per square meter
-            avg_rent_sqm: Average rent per square meter
+            operation: Operation type (buy, rent)
+            search_params: Additional search parameters
             
         Returns:
-            List of sample property listings
+            List of property listings
         """
         listings = []
         
-        # Generate 3-5 sample listings
-        for i in range(random.randint(3, 5)):
-            # Random size between 30-120 sqm for apartments, 80-200 for houses
-            size_min = 30 if property_type == "apartment" else 80
-            size_max = 120 if property_type == "apartment" else 200
-            size = random.randint(size_min, size_max)
+        # Get base price and rent values for the location and property type
+        base_values = {
+            "apartment": {
+                "berlin": {"price": 5000, "rent": 15.0},
+                "hamburg": {"price": 5500, "rent": 14.5},
+                "munich": {"price": 9000, "rent": 20.0},
+                "frankfurt": {"price": 6000, "rent": 16.0},
+                "cologne": {"price": 5000, "rent": 13.0},
+                "default": {"price": 5000, "rent": 15.0}
+            },
+            "house": {
+                "berlin": {"price": 4000, "rent": 12.0},
+                "hamburg": {"price": 4500, "rent": 13.0},
+                "munich": {"price": 8000, "rent": 17.0},
+                "frankfurt": {"price": 5000, "rent": 14.0},
+                "cologne": {"price": 4200, "rent": 12.0},
+                "default": {"price": 4000, "rent": 12.0}
+            },
+            "default": {
+                "default": {"price": 5000, "rent": 15.0}
+            }
+        }
+        
+        city = location.lower().split()[0]
+        prop_type = property_type.lower()
+        
+        type_data = base_values.get(prop_type, base_values["default"])
+        base_data = type_data.get(city, type_data.get("default"))
+        
+        # Extract search parameters
+        size_min = 30
+        size_max = 120
+        price_min = 0
+        price_max = 1000000000
+        required_features = []
+        
+        if search_params:
+            if "size_range" in search_params:
+                size_min = search_params["size_range"].get("min", size_min)
+                size_max = search_params["size_range"].get("max", size_max)
+            
+            if "price_range" in search_params:
+                price_min = search_params["price_range"].get("min", price_min)
+                price_max = search_params["price_range"].get("max", price_max)
+            
+            if "features" in search_params:
+                required_features = search_params["features"]
+        
+        # Generate 5-10 sample listings
+        num_listings = random.randint(5, 10)
+        
+        for i in range(num_listings):
+            # Generate size within the range
+            size = random.randint(int(size_min), int(size_max))
             
             # Price and rent with some variance
             price_variance = random.uniform(0.85, 1.15)
             rent_variance = random.uniform(0.85, 1.15)
             
-            price = round(size * avg_price_sqm * price_variance, 2)
-            rent = round(size * avg_rent_sqm * rent_variance, 2)
+            # Calculate price or rent based on operation
+            if operation == "buy":
+                price = round(size * base_data["price"] * price_variance, 2)
+                rent = round(size * base_data["rent"] * rent_variance, 2)  # Potential rent
+            else:  # rent
+                rent = round(size * base_data["rent"] * rent_variance, 2)
+                price = round(size * base_data["price"] * price_variance, 2)  # Property value
+            
+            # Skip if price is outside the specified range
+            if operation == "buy" and (price < price_min or price > price_max):
+                continue
+            if operation == "rent" and (rent < price_min or rent > price_max):
+                continue
+            
+            # Select features
+            all_features = ["balcony", "garden", "parking", "elevator", "storage", "fitted kitchen", "terrace"]
+            # Make sure required features are included
+            if required_features:
+                features = required_features.copy()
+                # Add some random additional features
+                for feature in random.sample([f for f in all_features if f not in required_features], 
+                                             k=random.randint(0, len(all_features) - len(required_features))):
+                    features.append(feature)
+            else:
+                features = random.sample(all_features, k=random.randint(1, 4))
             
             # Create listing
             listing = {
                 "id": f"listing-{uuid.uuid4().hex[:8]}",
                 "title": f"{size} sqm {property_type} in {location}",
+                "address": f"{random.randint(1, 100)} Example Street, {location}",
                 "size_sqm": size,
-                "price": price,
-                "price_sqm": round(price / size, 2),
-                "monthly_rent": rent,
-                "rent_sqm": round(rent / size, 2),
-                "bedrooms": random.randint(1, 4),
-                "bathrooms": random.choice([1, 1, 1.5, 2, 2.5]),
+                "features": features,
                 "year_built": random.randint(1950, 2020),
-                "features": random.sample(["balcony", "garden", "parking", "elevator", "storage", "fitted kitchen"], k=random.randint(1, 4))
+                "bedrooms": random.randint(1, 4),
+                "bathrooms": random.choice([1, 1, 1.5, 2, 2.5])
             }
+            
+            if operation == "buy":
+                listing["price"] = price
+                listing["price_per_sqm"] = round(price / size, 2)
+                listing["estimated_rent"] = rent
+                listing["rental_yield"] = round((rent * 12 / price) * 100, 2)
+            else:  # rent
+                listing["monthly_rent"] = rent
+                listing["rent_per_sqm"] = round(rent / size, 2)
+                listing["estimated_value"] = price
+                listing["deposit"] = round(rent * 3, 2)
             
             listings.append(listing)
         
         return listings
+    
+    def _get_price_trends(self, location: str, property_type: str, operation: str) -> Dict[str, Any]:
+        """
+        Get price trend data for the given parameters
+        
+        Args:
+            location: Location to get trends for
+            property_type: Type of property
+            operation: Operation type (buy, rent)
+            
+        Returns:
+            Dictionary with price trend data
+        """
+        # City-specific trend factors
+        city_trends = {
+            "berlin": {"yoy": 0.042, "mom": 0.004, "five_year": 0.21},
+            "hamburg": {"yoy": 0.038, "mom": 0.003, "five_year": 0.19},
+            "munich": {"yoy": 0.056, "mom": 0.005, "five_year": 0.28},
+            "frankfurt": {"yoy": 0.045, "mom": 0.004, "five_year": 0.23},
+            "cologne": {"yoy": 0.037, "mom": 0.003, "five_year": 0.18},
+            "default": {"yoy": 0.04, "mom": 0.003, "five_year": 0.2}
+        }
+        
+        # Property type modifiers
+        property_modifiers = {
+            "apartment": {"price": 1.1, "rent": 1.05},
+            "house": {"price": 1.0, "rent": 0.95},
+            "multi-family": {"price": 0.95, "rent": 1.0},
+            "commercial": {"price": 0.9, "rent": 1.1},
+            "default": {"price": 1.0, "rent": 1.0}
+        }
+        
+        # Get base trends for the city
+        city = location.lower().split()[0]
+        base_trends = city_trends.get(city, city_trends["default"])
+        
+        # Get property modifiers
+        modifiers = property_modifiers.get(property_type.lower(), property_modifiers["default"])
+        
+        # Calculate adjusted trends based on operation
+        if operation == "buy":
+            modifier = modifiers["price"]
+        else:  # rent
+            modifier = modifiers["rent"]
+        
+        # Apply modifier and add some randomness
+        yoy_change = base_trends["yoy"] * modifier * random.uniform(0.9, 1.1)
+        mom_change = base_trends["mom"] * modifier * random.uniform(0.9, 1.1)
+        five_year_change = base_trends["five_year"] * modifier * random.uniform(0.9, 1.1)
+        
+        # Format according to test expectations
+        # Tests expect simple numeric values, not nested objects
+        return {
+            "year_over_year": round(yoy_change * 100, 2),
+            "month_over_month": round(mom_change * 100, 2),
+            "five_year": round(five_year_change * 100, 2)
+        }
+    
+    def _get_confidence_scores(self, location: str, property_type: str, 
+                            data_source: str, sample_size: int) -> Dict[str, float]:
+        """
+        Calculate confidence scores for the market data
+        
+        Args:
+            location: Location being analyzed
+            property_type: Type of property
+            data_source: Data source being used
+            sample_size: Number of sample listings
+            
+        Returns:
+            Dictionary with confidence scores
+        """
+        # Base confidence score
+        base_confidence = 0.7
+        
+        # Adjust for location specificity
+        location_words = location.split()
+        location_specificity = min(1.0, 0.5 + 0.1 * len(location_words))  # More specific with more words
+        
+        # Adjust for data source
+        source_confidence = {
+            "primary_db": 0.9,
+            "real_estate_portal": 0.85,
+            "government_data": 0.95,
+            "market_analysis": 0.8
+        }
+        source_factor = source_confidence.get(data_source, 0.7)
+        
+        # Adjust for sample size - ensure it scales with sample size
+        # Cap it at 0.99 for normal case and 1.0 for high sample case
+        sample_size_score = min(0.99, 0.5 + (sample_size / 100))
+        
+        # Calculate trend data reliability
+        trend_data_score = 0.75  # Base score for trend data
+        
+        # Calculate overall confidence, weighing different factors
+        overall_confidence = (
+            base_confidence * 0.2 +
+            location_specificity * 0.2 +
+            source_factor * 0.25 +
+            sample_size_score * 0.2 +
+            trend_data_score * 0.15
+        )
+        
+        # Ensure all scores are between 0 and 1
+        return {
+            "overall": round(min(1.0, overall_confidence), 2),
+            "location_specificity": round(location_specificity, 2),
+            "data_source_reliability": round(source_factor, 2),
+            "sample_size_score": round(sample_size_score, 2),
+            "price_data": round(min(1.0, source_factor * sample_size_score), 2),
+            "trend_data": round(trend_data_score, 2)
+        }
     
     async def validate_input(self, parameters: Dict[str, Any]) -> bool:
         """
@@ -263,16 +524,45 @@ class MarketDataSearchAgent(BaseAgent):
         Returns:
             True if parameters are valid, False otherwise
         """
+        # Check required parameters
         required_params = ["location", "property_type"]
         for param in required_params:
             if param not in parameters:
                 logger.error(f"Missing required parameter: {param}")
                 return False
         
+        # Validate property type
         valid_property_types = ["apartment", "house", "multi-family", "commercial"]
         if parameters.get("property_type") not in valid_property_types:
             logger.error(f"Invalid property type: {parameters.get('property_type')}")
             return False
+        
+        # Validate operation if provided
+        if "operation" in parameters:
+            valid_operations = ["buy", "rent"]
+            if parameters.get("operation") not in valid_operations:
+                logger.error(f"Invalid operation: {parameters.get('operation')}")
+                return False
+        
+        # Validate search parameters if provided
+        if "search_params" in parameters and parameters["search_params"]:
+            search_params = parameters["search_params"]
+            
+            # Validate price range if provided
+            if "price_range" in search_params:
+                price_range = search_params["price_range"]
+                if "min" in price_range and "max" in price_range:
+                    if price_range["min"] > price_range["max"]:
+                        logger.error(f"Invalid price range: min ({price_range['min']}) > max ({price_range['max']})")
+                        return False
+            
+            # Validate size range if provided
+            if "size_range" in search_params:
+                size_range = search_params["size_range"]
+                if "min" in size_range and "max" in size_range:
+                    if size_range["min"] > size_range["max"]:
+                        logger.error(f"Invalid size range: min ({size_range['min']}) > max ({size_range['max']})")
+                        return False
         
         return True
     
@@ -336,15 +626,15 @@ class LangChainMarketDataAgent(LangChainAgent):
             api_key: OpenAI API key for the LLM. If not provided, will look for OPENAI_API_KEY env variable
         """
         # Set up OpenAI API key
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
-        if not self.api_key:
+        api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        if not api_key:
             raise ValueError("OpenAI API key is required either as parameter or OPENAI_API_KEY environment variable")
         
         # Create LLM
         llm = ChatOpenAI(
             temperature=0.2,
             model_name="gpt-3.5-turbo",
-            api_key=self.api_key
+            api_key=api_key
         )
         
         # Create tools
@@ -444,28 +734,6 @@ class LangChainMarketDataAgent(LangChainAgent):
                 "error": str(e),
                 "query": query,
                 "location": location,
-                "property_type": property_type
+                "property_type": property_type,
+                "timestamp": datetime.datetime.now().isoformat()
             }
-
-
-# Factory function to create the appropriate market data agent
-def create_market_data_agent(use_langchain: bool = True, api_key: Optional[str] = None) -> BaseAgent:
-    """
-    Create a market data agent
-    
-    Args:
-        use_langchain: Whether to use the LangChain implementation
-        api_key: OpenAI API key if using LangChain
-        
-    Returns:
-        A market data agent
-    """
-    if use_langchain:
-        try:
-            return LangChainMarketDataAgent(api_key=api_key)
-        except Exception as e:
-            logger.error(f"Failed to create LangChain market data agent: {str(e)}")
-            logger.info("Falling back to basic market data agent")
-            return MarketDataSearchAgent()
-    else:
-        return MarketDataSearchAgent()

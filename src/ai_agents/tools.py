@@ -27,8 +27,12 @@ class RealEstateSearchInput(BaseModel):
 class RealEstateSearchTool(BaseTool):
     """Tool for searching real estate listings"""
     name = "real_estate_search"
-    description = "Search for real estate listings based on location, property type, and other criteria"
+    description = "Searches for real estate listings based on location, property type, and other criteria"
     args_schema = RealEstateSearchInput
+    
+    def __init__(self):
+        super().__init__()
+        self.func = self._run
     
     def _run(self, location: str, property_type: str, min_size: Optional[int] = None, 
              max_size: Optional[int] = None, min_price: Optional[int] = None, 
@@ -161,8 +165,12 @@ class RentEstimationInput(BaseModel):
 class RentEstimationTool(BaseTool):
     """Tool for estimating rental prices for properties"""
     name = "rent_estimation"
-    description = "Estimate rental prices for properties based on location, size, and features"
+    description = "Estimates the potential rental income for properties based on location, size, and features"
     args_schema = RentEstimationInput
+    
+    def __init__(self):
+        super().__init__()
+        self.func = self._run
     
     def _run(self, location: str, property_type: str, size_sqm: int, 
              bedrooms: Optional[int] = None, bathrooms: Optional[float] = None, 
@@ -323,8 +331,12 @@ class MarketTrendInput(BaseModel):
 class MarketTrendTool(BaseTool):
     """Tool for analyzing real estate market trends"""
     name = "market_trend_analysis"
-    description = "Analyze real estate market trends for a specific location and property type"
+    description = "Analyzes real estate market trends for a specific location and property type"
     args_schema = MarketTrendInput
+    
+    def __init__(self):
+        super().__init__()
+        self.func = self._run
     
     def _run(self, location: str, property_type: str, time_period: str = "12 months") -> Dict[str, Any]:
         """Run the market trend analysis tool"""

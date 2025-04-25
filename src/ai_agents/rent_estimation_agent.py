@@ -18,7 +18,7 @@ from langchain.chat_models import ChatOpenAI
 
 # Local imports
 from .base_agent import BaseAgent, LangChainAgent
-from .tools import create_real_estate_tools
+from .tools import create_real_estate_tools, RentEstimationTool
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -90,7 +90,9 @@ class RentEstimationAgent(BaseAgent):
         Returns:
             Dictionary containing rent estimation results
         """
-        if not await self.validate_input(parameters):
+        # Validate the input parameters
+        validation_result = await self.validate_input(parameters)
+        if not validation_result:
             logger.error("Invalid input parameters for rent estimation")
             return {"error": "Invalid input parameters", "success": False}
         
@@ -171,7 +173,12 @@ class RentEstimationAgent(BaseAgent):
             
         except Exception as e:
             logger.error(f"Error in rent estimation: {str(e)}")
-            return {"error": str(e), "success": False}
+            return {
+                "success": False,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "timestamp": datetime.datetime.now().isoformat()
+            }
     
     def _get_default_rent_sqm(self, location: str, property_type: str) -> float:
         """
@@ -620,7 +627,6 @@ class LangChainRentEstimationAgent(LangChainAgent):
         )
         
         # Create tools - we only need the rent estimation tool for this agent
-        from .tools import RentEstimationTool
         tools = [RentEstimationTool()]
         
         # Define the prompt template

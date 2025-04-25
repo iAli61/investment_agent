@@ -36,9 +36,153 @@ class BaseAgent(abc.ABC):
         self.version = "1.0.0"
         self.execution_history: List[Dict[str, Any]] = []
         self.iteration_count = 0
+        self.execution_count = 0  # For backward compatibility
+        self.creation_time = datetime.datetime.now()  # Add creation time
         self.max_iterations = 10  # Default maximum iterations
         self.should_continue = True  # Flag to track if iterations should continue
         logger.info(f"Initialized agent: {self.name}")
+    
+    async def execute(self, parameters: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute the agent with the given parameters and context
+        
+        This method handles input validation, execution, and result processing.
+        
+        Args:
+            parameters: Parameters specific to this agent execution
+            context: Shared context from the orchestrator
+            
+        Returns:
+            Dictionary with execution results including success flag, timestamp, and execution time
+        """
+        start_time = datetime.datetime.now()
+        self.execution_count += 1
+        self.iteration_count += 1
+        
+        logger.info(f"Executing agent: {self.name} with parameters: {parameters}")
+        
+        # Process continue_iteration parameter
+        continue_param = str(parameters.get("continue_iteration", "")).lower()
+        if continue_param in ["no", "false", "0"]:
+            self.should_continue = False
+        elif continue_param in ["yes", "true", "1"]:
+            self.should_continue = True
+        
+        # Check if maximum iterations reached
+        if self.iteration_count >= self.max_iterations:
+            self.should_continue = False
+        
+        # Validate input parameters
+        validation_result = await self.validate_input(parameters)
+        
+        # If validation fails, return error
+        if not validation_result:
+            end_time = datetime.datetime.now()
+            execution_time = (end_time - start_time).total_seconds()
+            logger.warning(f"Validation failed for agent: {self.name}")
+            
+            result = {
+                "success": False,
+                "error": "Input validation failed",
+                "timestamp": end_time.isoformat(),
+                "execution_time": execution_time,
+                "iteration": self.iteration_count,
+                "should_continue": False,
+                "message": "Iteration complete."
+            }
+            
+            self.should_continue = False
+            return result
+        
+        # Execute agent logic
+        try:
+            result = await self._execute_logic(parameters, context)
+            success = result.get("success", True)
+            
+            # Add execution metadata
+            end_time = datetime.datetime.now()
+            execution_time = (end_time - start_time).total_seconds()
+            
+            # Always ensure these fields are present for consistent results
+            if "success" not in result:
+                result["success"] = success
+            
+            result["timestamp"] = end_time.isoformat()
+            result["execution_time"] = execution_time
+            result["iteration"] = self.iteration_count
+            result["should_continue"] = self.should_continue
+            
+            # Set appropriate message
+            if self.should_continue:
+                result["message"] = "Continue to iterate?"
+            else:
+                result["message"] = "Iteration complete."
+            
+            logger.info(f"Agent {self.name} executed successfully in {execution_time:.2f} seconds")
+            
+        except Exception as e:
+            # Handle any exception during execution
+            end_time = datetime.datetime.now()
+            execution_time = (end_time - start_time).total_seconds()
+            logger.error(f"Error executing agent {self.name}: {str(e)}", exc_info=True)
+            
+            result = {
+                "success": False,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "timestamp": end_time.isoformat(),
+                "execution_time": execution_time,
+                "iteration": self.iteration_count,
+                "should_continue": False,
+                "message": "Iteration complete."
+            }
+            
+            self.should_continue = False
+        
+        # Log execution
+        self.log_execution(parameters, result)
+        
+        return result
+    
+    def log_execution(self, parameters: Dict[str, Any], result: Dict[str, Any]) -> None:
+        """
+        Log the execution details to the agent's history
+        
+        Args:
+            parameters: Parameters used for execution
+            result: Execution result
+        """
+        log_entry = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "parameters": parameters,
+            "result": result,
+            "iteration": self.iteration_count
+        }
+        
+        self.execution_history.append(log_entry)
+        logger.debug(f"Logged execution for agent: {self.name}, iteration: {self.iteration_count}")
+    
+    def reset_iteration(self) -> None:
+        """Reset the iteration state"""
+        self.iteration_count = 0
+        self.should_continue = True
+        logger.debug(f"Reset iteration state for agent: {self.name}")
+    
+    def set_max_iterations(self, max_iterations: int) -> None:
+        """
+        Set the maximum number of iterations
+        
+        Args:
+            max_iterations: Maximum number of iterations
+            
+        Raises:
+            ValueError: If max_iterations is less than 1
+        """
+        if max_iterations < 1:
+            raise ValueError("Maximum iterations must be at least 1")
+        
+        self.max_iterations = max_iterations
+        logger.debug(f"Set max iterations for agent {self.name} to {max_iterations}")
     
     @abc.abstractmethod
     def _get_agent_name(self) -> str:
@@ -74,175 +218,35 @@ class BaseAgent(abc.ABC):
         """
         pass
     
-    async def execute(self, parameters: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    async def validate_input(self, parameters: Dict[str, Any]) -> bool:
         """
-        Execute the agent with parameters and context
+        Validate the input parameters
         
-        This is the main entry point for agent execution, which handles common
-        operations like timing, error handling, and result formatting
+        This method should be overridden by subclasses that need validation
         
         Args:
-            parameters: Parameters specific to this agent execution
-            context: Shared context from the orchestrator
+            parameters: Parameters to validate
             
         Returns:
-            Dictionary with execution results
+            True if parameters are valid, False otherwise
         """
-        execution_id = str(uuid.uuid4())
-        start_time = datetime.datetime.now()
-        
-        # Check if this is an iteration request
-        continue_param = parameters.get("continue_iteration")
-        if continue_param is not None:
-            # Process continue_iteration parameter
-            if continue_param.lower() in ["yes", "true", "y", "continue"]:
-                self.should_continue = True
-            elif continue_param.lower() in ["no", "false", "n", "stop"]:
-                self.should_continue = False
-                
-            # If a prior iteration indicated to stop, don't reset it
-            if not self.should_continue:
-                logger.info(f"Agent {self.name} iteration stopped by user")
-        
-        # Increment iteration counter
-        self.iteration_count += 1
-        
-        # Check if we've reached max iterations
-        if self.iteration_count >= self.max_iterations:
-            logger.info(f"Agent {self.name} reached maximum iterations ({self.max_iterations})")
-            self.should_continue = False
-        
-        logger.info(f"Starting execution of agent {self.name} (iteration {self.iteration_count}) with ID {execution_id}")
-        
-        try:
-            # Execute the agent's logic
-            result = await self._execute_logic(parameters, context)
-            
-            # Add metadata
-            end_time = datetime.datetime.now()
-            execution_time = (end_time - start_time).total_seconds()
-            
-            # Ensure result is a dictionary with required fields
-            if not isinstance(result, dict):
-                result = {"data": result, "success": True}
-            if "success" not in result:
-                result["success"] = True
-                
-            # Add execution metadata
-            result.update({
-                "execution_id": execution_id,
-                "agent_name": self.name,
-                "start_time": start_time.isoformat(),
-                "end_time": end_time.isoformat(),
-                "execution_time_seconds": execution_time,
-                "parameters": parameters,  # Include the original parameters
-                "iteration": self.iteration_count,
-                "should_continue": self.should_continue
-            })
-            
-            # If agent should continue, add a prompt for the next iteration
-            if self.should_continue:
-                result["message"] = "Continue to iterate?"
-            else:
-                result["message"] = "Iteration complete."
-            
-            logger.info(f"Completed execution of agent {self.name} iteration {self.iteration_count} in {execution_time:.2f}s")
-            
-            # Log the execution
-            self.log_execution(parameters, result)
-            
-            return result
-            
-        except Exception as e:
-            # Handle exceptions and return error information
-            end_time = datetime.datetime.now()
-            execution_time = (end_time - start_time).total_seconds()
-            
-            error_result = {
-                "success": False,
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "execution_id": execution_id,
-                "agent_name": self.name,
-                "start_time": start_time.isoformat(),
-                "end_time": end_time.isoformat(),
-                "execution_time_seconds": execution_time,
-                "parameters": parameters,  # Include the original parameters
-                "iteration": self.iteration_count,
-                "should_continue": False  # Don't continue after an error
-            }
-            
-            # Log the execution
-            self.log_execution(parameters, error_result)
-            
-            logger.error(f"Error executing agent {self.name} iteration {self.iteration_count}: {str(e)}")
-            return error_result
-    
-    def reset_iteration(self) -> None:
-        """
-        Reset the iteration counter and continue flag
-        
-        This allows an agent to start a fresh iteration sequence
-        """
-        self.iteration_count = 0
-        self.should_continue = True
-        logger.info(f"Reset iteration state for agent {self.name}")
-    
-    def set_max_iterations(self, max_iterations: int) -> None:
-        """
-        Set the maximum number of iterations for this agent
-        
-        Args:
-            max_iterations: Maximum number of iterations
-        """
-        if max_iterations <= 0:
-            raise ValueError("Maximum iterations must be greater than zero")
-        
-        self.max_iterations = max_iterations
-        logger.info(f"Set max iterations for agent {self.name} to {max_iterations}")
-    
-    def log_execution(self, parameters: Dict[str, Any], result: Dict[str, Any]) -> None:
-        """
-        Log an execution to the agent's history
-        
-        Args:
-            parameters: Parameters passed to the agent
-            result: Result returned by the agent
-        """
-        # Store execution history (limited to last 100 executions)
-        self.execution_history.append({
-            "timestamp": datetime.datetime.now().isoformat(),
-            "parameters": parameters,
-            "result_summary": {
-                "success": result.get("success", False),
-                "execution_id": result.get("execution_id", ""),
-                "execution_time_seconds": result.get("execution_time_seconds", 0),
-                "iteration": result.get("iteration", 0),
-                "should_continue": result.get("should_continue", False),
-                "error": result.get("error", None) if not result.get("success", False) else None
-            }
-        })
-        
-        # Keep only the last 100 executions
-        if len(self.execution_history) > 100:
-            self.execution_history = self.execution_history[-100:]
+        # Default implementation always passes validation
+        return True
     
     def get_agent_info(self) -> Dict[str, Any]:
         """
         Get information about this agent
         
         Returns:
-            Dictionary with agent information
+            Dictionary with agent metadata
         """
         return {
             "name": self.name,
             "description": self.description,
             "version": self.version,
-            "execution_count": len(self.execution_history),
-            "iteration_count": self.iteration_count,
-            "max_iterations": self.max_iterations,
-            "should_continue": self.should_continue,
-            "last_execution": self.execution_history[-1] if self.execution_history else None
+            "type": "BaseAgent",
+            "execution_count": self.execution_count,
+            "creation_time": self.creation_time.isoformat()
         }
     
     def get_execution_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
