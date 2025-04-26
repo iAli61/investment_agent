@@ -24,6 +24,21 @@ from .guardrails import create_guardrails
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Monkey patch Agent class to add guardrails attribute if it doesn't exist
+if not hasattr(Agent, 'guardrails'):
+    # Add guardrails attribute to Agent class
+    setattr(Agent, 'guardrails', property(
+        lambda self: getattr(self, '_guardrails', []),
+        lambda self, value: setattr(self, '_guardrails', value)
+    ))
+    # Initialize _guardrails for each new Agent instance
+    original_init = Agent.__init__
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        self._guardrails = []
+    Agent.__init__ = patched_init
+    logger.info("Added guardrails support to Agent class")
+
 class AIAgentSystem:
     """
     Integrated AI agent system for property investment analysis.
@@ -131,29 +146,52 @@ class AIAgentSystem:
         
         # Apply guardrails to all agents
         for agent_type, agent in self.specialized_agents.items():
-            for guardrail in self.guardrails:
-                agent.guardrails.append(guardrail)
-            
-            # Register with orchestrator
-            self.orchestrator.register_specialized_agent(agent_type, agent)
-            
-            logger.info(f"Initialized {agent_type} agent with guardrails")
+            try:
+                # Safely add guardrails to agent
+                if not hasattr(agent, 'guardrails'):
+                    # If no guardrails attribute exists, create it
+                    setattr(agent, '_guardrails', [])
+                    
+                # Add each guardrail safely
+                guardrails_list = getattr(agent, '_guardrails', [])
+                for guardrail in self.guardrails:
+                    if guardrail not in guardrails_list:
+                        guardrails_list.append(guardrail)
+                
+                # Register with orchestrator
+                self.orchestrator.register_specialized_agent(agent_type, agent)
+                
+                logger.info(f"Initialized {agent_type} agent with guardrails")
+            except Exception as e:
+                logger.error(f"Error initializing {agent_type} agent: {str(e)}")
+                raise
     
     def _initialize_manager_agent(self):
         """Initialize the manager agent."""
         logger.info("Initializing manager agent")
         
-        # Create manager agent with specialized agents as tools
-        self.manager_agent = create_manager_agent(self.specialized_agents)
-        
-        # Apply guardrails to manager agent
-        for guardrail in self.guardrails:
-            self.manager_agent.guardrails.append(guardrail)
-        
-        # Register with orchestrator
-        self.orchestrator.register_manager_agent(self.manager_agent)
-        
-        logger.info("Manager agent initialized with guardrails")
+        try:
+            # Create manager agent with specialized agents as tools
+            self.manager_agent = create_manager_agent(self.specialized_agents)
+            
+            # Apply guardrails to manager agent safely
+            if not hasattr(self.manager_agent, 'guardrails'):
+                # If no guardrails attribute exists, create it
+                setattr(self.manager_agent, '_guardrails', [])
+                
+            # Add each guardrail safely
+            guardrails_list = getattr(self.manager_agent, '_guardrails', [])
+            for guardrail in self.guardrails:
+                if guardrail not in guardrails_list:
+                    guardrails_list.append(guardrail)
+            
+            # Register with orchestrator
+            self.orchestrator.register_manager_agent(self.manager_agent)
+            
+            logger.info("Manager agent initialized with guardrails")
+        except Exception as e:
+            logger.error(f"Error initializing manager agent: {str(e)}")
+            raise
     
     async def process_user_request(self, user_input: str) -> Dict[str, Any]:
         """

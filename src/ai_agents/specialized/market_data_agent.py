@@ -30,6 +30,10 @@ class MarketDataRequest(BaseModel):
     property_type: str
     data_types: List[str]
     timeframe: Optional[str] = "5 years"
+    
+    model_config = {
+        "extra": "forbid"
+    }
 
 class MarketDataResult(BaseModel):
     """Result from the Market Data Search Agent."""
@@ -42,6 +46,10 @@ class MarketDataResult(BaseModel):
     confidence_scores: Dict[str, float]
     sources: List[str]
     timestamp: str
+    
+    model_config = {
+        "extra": "forbid"
+    }
 
 def create_market_data_search_agent() -> Agent:
     """Create and configure the Market Data Search Agent."""

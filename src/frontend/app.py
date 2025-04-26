@@ -35,6 +35,8 @@ if "analysis_result" not in st.session_state:
     st.session_state.analysis_result = None
 if "units" not in st.session_state:
     st.session_state.units = []
+if "tab_change_requested" not in st.session_state:
+    st.session_state.tab_change_requested = False
 
 # Helper functions
 def fetch_market_data(location, property_type):
@@ -86,6 +88,12 @@ def analyze_property(property_data, units_data, financing_data, expenses_data, t
     data = response.json()
     st.session_state.analysis_result = data
     return data
+
+def change_tab(tab_name):
+    """Change tab safely without causing recursion"""
+    st.session_state.current_tab = tab_name
+    st.session_state.tab_change_requested = True
+    st.rerun()
 
 def format_currency(value):
     """Format a value as currency"""
@@ -286,8 +294,15 @@ with st.sidebar:
         "Expenses & Tax", 
         "Analysis Results"
     ]
+    
+    # Only update the tab if it was changed directly in the sidebar
     selected_tab = st.radio("Select Section", tabs, index=tabs.index(st.session_state.current_tab))
-    st.session_state.current_tab = selected_tab
+    if selected_tab != st.session_state.current_tab and not st.session_state.tab_change_requested:
+        st.session_state.current_tab = selected_tab
+    
+    # Reset the tab change request flag
+    if st.session_state.tab_change_requested:
+        st.session_state.tab_change_requested = False
     
     st.markdown("---")
     st.markdown("## About")
@@ -388,14 +403,12 @@ if st.session_state.current_tab == "Property Input":
         # data = response.json()
         
         st.success("Property details saved successfully!")
-        st.session_state.current_tab = "Rental Units"
-        st.experimental_rerun()
+        change_tab("Rental Units")
 
 elif st.session_state.current_tab == "Rental Units":
     if not st.session_state.current_property:
         st.warning("Please enter property details first.")
-        st.session_state.current_tab = "Property Input"
-        st.experimental_rerun()
+        change_tab("Property Input")
     
     st.markdown('<div class="sub-header">Rental Units</div>', unsafe_allow_html=True)
     st.markdown(f"Add rental units for {st.session_state.current_property.get('address', 'your property')}")
@@ -466,7 +479,7 @@ elif st.session_state.current_tab == "Rental Units":
             
             st.session_state.units.append(new_unit)
             st.success(f"Unit {unit_number} added successfully!")
-            st.experimental_rerun()
+            st.rerun()
     
     # Rent estimation with AI
     st.markdown('<div class="sub-header">Rent Estimation with AI</div>', unsafe_allow_html=True)
@@ -569,14 +582,12 @@ elif st.session_state.current_tab == "Rental Units":
     
     # Navigate to next section
     if st.button("Continue to Financing"):
-        st.session_state.current_tab = "Financing"
-        st.experimental_rerun()
+        change_tab("Financing")
 
 elif st.session_state.current_tab == "Financing":
     if not st.session_state.current_property:
         st.warning("Please enter property details first.")
-        st.session_state.current_tab = "Property Input"
-        st.experimental_rerun()
+        change_tab("Property Input")
     
     st.markdown('<div class="sub-header">Financing Details</div>', unsafe_allow_html=True)
     st.markdown(f"Set up financing for {st.session_state.current_property.get('address', 'your property')}")
@@ -682,14 +693,12 @@ elif st.session_state.current_tab == "Financing":
         st.session_state.financing_data = financing_data
         
         st.success("Financing details saved successfully!")
-        st.session_state.current_tab = "Expenses & Tax"
-        st.experimental_rerun()
+        change_tab("Expenses & Tax")
 
 elif st.session_state.current_tab == "Expenses & Tax":
     if not st.session_state.current_property or not st.session_state.units:
         st.warning("Please enter property and rental unit details first.")
-        st.session_state.current_tab = "Property Input"
-        st.experimental_rerun()
+        change_tab("Property Input")
     
     st.markdown('<div class="sub-header">Operating Expenses & Tax Benefits</div>', unsafe_allow_html=True)
     
@@ -848,14 +857,12 @@ elif st.session_state.current_tab == "Expenses & Tax":
             
             st.session_state.analysis_result = analysis_result
             
-            st.session_state.current_tab = "Analysis Results"
-            st.experimental_rerun()
+            change_tab("Analysis Results")
 
 elif st.session_state.current_tab == "Analysis Results":
     if not st.session_state.analysis_result:
         st.warning("Please complete all previous steps to generate analysis results.")
-        st.session_state.current_tab = "Property Input"
-        st.experimental_rerun()
+        change_tab("Property Input")
     
     st.markdown('<div class="sub-header">Investment Analysis Results</div>', unsafe_allow_html=True)
     
@@ -1061,4 +1068,4 @@ elif st.session_state.current_tab == "Analysis Results":
                 del st.session_state[key]
             
             st.session_state.current_tab = "Property Input"
-            st.experimental_rerun()
+            st.rerun()

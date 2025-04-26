@@ -2,6 +2,7 @@
 Main backend API for the Property Investment Analysis App
 """
 import os
+import logging
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,8 +14,26 @@ from datetime import datetime
 
 from ..database.database import get_db
 from ..database.models import User, Property, RentalUnit, Expense, Financing, Analysis
-from ..ai_agents.orchestrator import orchestrator, AgentTask
+from ..ai_agents.orchestrator import orchestrator
+from ..ai_agents import AIAgentSystem
 from ..utils.financial_utils import analyze_property_investment
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# AI agent system instance
+ai_agent_system = None
+
+# Define AgentTask class
+class AgentTask(BaseModel):
+    task_id: str
+    agent_type: str
+    description: str
+    parameters: Dict[str, Any]
+    status: str = "pending"
+    
+    class Config:
+        orm_mode = True
 
 app = FastAPI(title="Property Investment Analysis API")
 
@@ -26,6 +45,47 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Startup event to initialize AI agent system
+@app.on_event("startup")
+async def startup_event():
+    global ai_agent_system
+    
+    try:
+        # Check if Azure OpenAI environment variables are available
+        use_azure = os.environ.get("USE_AZURE_OPENAI", "false").lower() == "true"
+        if use_azure:
+            azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+            azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME")
+            azure_api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2023-07-01-preview")
+            use_managed_identity = os.environ.get("AZURE_USE_MANAGED_IDENTITY", "false").lower() == "true"
+            
+            # Initialize with Azure OpenAI if environment variables are set
+            if azure_endpoint and azure_deployment:
+                ai_agent_system = AIAgentSystem(
+                    use_azure=True,
+                    azure_deployment=azure_deployment,
+                    azure_endpoint=azure_endpoint,
+                    azure_api_version=azure_api_version,
+                    use_managed_identity=use_managed_identity
+                )
+            else:
+                # Fall back to standard OpenAI if Azure config is incomplete
+                ai_agent_system = AIAgentSystem(model_name="gpt-4o")
+        else:
+            # Standard OpenAI initialization
+            ai_agent_system = AIAgentSystem(model_name="gpt-4o")
+            
+        # Initialize the AI agent system
+        ai_agent_system.initialize()
+        
+        # Make the orchestrator globally available
+        global orchestrator
+        orchestrator = ai_agent_system.orchestrator
+    except Exception as e:
+        logger.error(f"Error during startup: {str(e)}")
+        logger.exception("Detailed stack trace follows:")
+        raise
 
 # Define Pydantic models for request/response validation
 class PropertyBase(BaseModel):
@@ -306,10 +366,13 @@ async def analyze_property(property_id: int, analysis_request: PropertyAnalysisR
 async def get_market_data(request: MarketDataRequest, background_tasks: BackgroundTasks):
     task_id = str(uuid.uuid4())
     
+    # Log the available agent types for debugging
+    logger.info(f"Available agent types: {list(orchestrator.specialized_agents.keys())}")
+    
     # Create task for market data agent
     task = AgentTask(
         task_id=task_id,
-        agent_type="market_data_search_agent",
+        agent_type="market_data",
         description=f"Get market data for {request.location}, {request.property_type}",
         parameters={
             "location": request.location,
@@ -346,7 +409,7 @@ async def estimate_rent(request: RentEstimationRequest, background_tasks: Backgr
     # Create task for rent estimation agent
     task = AgentTask(
         task_id=task_id,
-        agent_type="rent_estimation_agent",
+        agent_type="rent_estimation",
         description=f"Estimate rent for {request.size_sqm} sqm {request.property_type} in {request.location}",
         parameters={
             "location": request.location,

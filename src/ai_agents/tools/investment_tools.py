@@ -7,8 +7,8 @@ This module implements various tools that can be used by multiple specialized ag
 import logging
 import json
 import requests
-from typing import Dict, List, Optional, Any
-from pydantic import BaseModel
+from typing import Dict, List, Optional, Any, Union
+from pydantic import BaseModel, Field
 from agents import function_tool
 
 # Configure logging
@@ -27,6 +27,10 @@ class MarketData(BaseModel):
     confidence_score: float
     source: str
     timestamp: str
+    
+    model_config = {
+        "extra": "forbid"
+    }
 
 class PropertyData(BaseModel):
     """Property data structured format."""
@@ -38,12 +42,28 @@ class PropertyData(BaseModel):
     condition: Optional[str] = None
     price: Optional[float] = None
     features: Optional[List[str]] = None
+    
+    model_config = {
+        "extra": "forbid"
+    }
 
 class DocumentInfo(BaseModel):
     """Information extracted from property documents."""
     document_type: str
     content: Dict[str, Any]
     confidence_score: float
+    
+    model_config = {
+        "extra": "forbid"
+    }
+
+class ToolContext(BaseModel):
+    """Context for tools containing parameters."""
+    parameters: Optional[Dict[str, Any]] = None
+    
+    model_config = {
+        "extra": "forbid"
+    }
 
 @function_tool
 def web_search(location: str, data_type: str) -> str:
