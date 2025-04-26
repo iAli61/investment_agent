@@ -67,7 +67,9 @@ flowchart TD
     end
 
     subgraph "Tools Layer"
-        WebSearch[Web Search Tool]
+        GoogleSearchTool[Google Search Tool]
+        BingSearchTool[Bing Search Tool]
+        WebScraper[Web Scraper Tool]
         DocParser[Document Parser Tool]
         DataAnalysis[Data Analysis Tool]
         LLMInterface[LLM Interface Tool]
@@ -83,6 +85,8 @@ flowchart TD
     end
 
     subgraph "External Services"
+        GoogleSearch[Google Search API]
+        BingSearch[Bing Search API]
         RealEstate[Real Estate Websites]
         GovData[Government Databases]
         TaxRegs[Tax Regulation Sources]
@@ -105,16 +109,22 @@ flowchart TD
     Orchestrator --> DocAgent
     Orchestrator --> OptAgent
     
-    SearchAgent --> WebSearch
+    SearchAgent --> GoogleSearchTool
+    SearchAgent --> BingSearchTool
+    SearchAgent --> WebScraper
     RentAgent --> LLMInterface
-    TaxAgent --> WebSearch
+    TaxAgent --> GoogleSearchTool
+    TaxAgent --> BingSearchTool
+    TaxAgent --> WebScraper
     RiskAgent --> LLMInterface
     DocAgent --> DocParser
     OptAgent --> LLMInterface
     
-    WebSearch --> RealEstate
-    WebSearch --> GovData
-    WebSearch --> TaxRegs
+    GoogleSearchTool --> GoogleSearch
+    BingSearchTool --> BingSearch
+    WebScraper --> RealEstate
+    WebScraper --> GovData
+    WebScraper --> TaxRegs
     LLMInterface --> LLM
     DBQuery --> UserDB
     DBQuery --> PropertyDB
@@ -269,10 +279,18 @@ flowchart TD
     AgentRouter --> MonitoringAgent
     AgentRouter --> RecommendationAgent
     
+    AgentRouter --> SearchCoordinator
+    SearchCoordinator --> SearchAgent
+    SearchCoordinator --> MonitoringAgent
+    
+    SearchAgent --> GoogleSearchTool
+    SearchAgent --> BingSearchTool
     SearchAgent --> WebScraper
     SearchAgent --> DatabaseQuery
     AnalysisAgent --> LLMInterface
     AnalysisAgent --> DataProcessor
+    MonitoringAgent --> GoogleSearchTool
+    MonitoringAgent --> BingSearchTool
     MonitoringAgent --> WebScraper
     MonitoringAgent --> DatabaseQuery
     RecommendationAgent --> LLMInterface
@@ -444,7 +462,7 @@ flowchart TD
 
 | **Requirement ID** | **Description** | **User Story** | **Detailed Requirements** |
 |-------------------|-----------------|----------------|---------------------------|
-| **AI-001** | Market Data Search Capability | As an investor, I want the system to automatically gather up-to-date market data for my target location. | **Specialized Agent Tool:** <br>- Implements SearchAgent capability that utilizes WebSearch and DatabaseQuery tools <br>- Tasks: Collect current rental rates, property values, vacancy rates, and market trends <br><br>**Reusable Tools:** <br>- `web_search(location, data_type)`: Searches real estate websites, government databases <br>- `parse_market_data(raw_data)`: Extracts structured data from web results <br>- `store_market_data(parsed_data)`: Saves to MarketDB with source attribution <br><br>**Instructions:** <br>1. Accept location and data type parameters <br>2. Determine appropriate sources based on data type <br>3. Execute web search with appropriate queries <br>4. Parse and validate results with confidence scores <br>5. Store validated data with timestamps and source citations <br><br>**Model Selection:** Smaller, faster models sufficient for search and extraction <br><br>**Guardrails:** <br>- Relevance check ensures searches stay on topic <br>- Data validation confirms values within reasonable ranges <br>- Source verification prioritizes reliable websites <br><br>**Human Intervention:** <br>- Trigger when confidence scores below threshold <br>- Trigger when conflicting data found across sources |
+| **AI-001** | Market Data Search Capability | As an investor, I want the system to automatically gather up-to-date market data for my target location. | **Specialized Agent Tool:** <br>- Implements SearchAgent capability that utilizes Google Search, Bing Search, Web Scraper, and DatabaseQuery tools <br>- Tasks: Collect current rental rates, property values, vacancy rates, and market trends <br><br>**Reusable Tools:** <br>- `google_search(query, params)`: Performs structured search via Google Search API <br>- `bing_search(query, params)`: Performs structured search via Bing Search API <br>- `web_scrape(url, selectors)`: Targeted scraping from specific websites when needed <br>- `parse_market_data(raw_data)`: Extracts structured data from search results and web pages <br>- `store_market_data(parsed_data)`: Saves to MarketDB with source attribution <br><br>**Instructions:** <br>1. Accept location and data type parameters <br>2. Formulate search queries based on data requirements <br>3. Execute tiered search strategy: <br>   a. First attempt Google Search API with structured query <br>   b. If insufficient results, try Bing Search API with refined query <br>   c. For specific data needs or if search APIs yield insufficient results, use targeted web scraping <br>4. Parse and validate results with confidence scores <br>5. Compare data across sources to identify discrepancies <br>6. Store validated data with timestamps and source citations <br><br>**Model Selection:** Smaller, faster models sufficient for search and extraction <br><br>**Guardrails:** <br>- Relevance check ensures searches stay on topic <br>- Data validation confirms values within reasonable ranges <br>- Source verification prioritizes reliable websites <br><br>**Human Intervention:** <br>- Trigger when confidence scores below threshold <br>- Trigger when conflicting data found across sources |
 | **AI-002** | Rent Estimation Capability | As an investor, I want accurate rent estimates for vacant units based on current market conditions. | **Specialized Agent Tool:** <br>- Implements AnalysisAgent capability using LLMInterface and DataProcessor tools <br>- Tasks: Generate rental estimates based on property specifics and market data <br><br>**Reusable Tools:** <br>- `query_market_data(location, property_type)`: Retrieves comparable properties <br>- `analyze_comparables(property_data, comparables)`: Determines relevant factors <br>- `generate_rent_estimate(property, analysis)`: Produces estimate with reasoning <br><br>**Instructions:** <br>1. Retrieve property specifics (size, features, condition) <br>2. Query database for comparable properties in location <br>3. Analyze key factors affecting rent (renovations, amenities, etc.) <br>4. Generate estimate with low/medium/high ranges <br>5. Check against Mietpreisbremse limits and flag if exceeded <br><br>**Model Selection:** More capable model for analysis and reasoning <br><br>**Guardrails:** <br>- Output validation ensures estimates within realistic ranges <br>- Flag potential legal issues (rent control violations) <br><br>**Human Intervention:** <br>- Trigger when limited comparable data available <br>- Trigger for unusual property features requiring judgment |
 | **AI-003** | Tax Regulation Monitoring Capability | As an investor, I want to ensure my tax calculations reflect current regulations. | **Specialized Agent Tool:** <br>- Implements MonitoringAgent capability using WebSearch and DatabaseQuery tools <br>- Tasks: Track changes to tax regulations affecting property investments <br><br>**Reusable Tools:** <br>- `monitor_tax_sources(region)`: Regularly checks official sources <br>- `detect_regulation_changes(old_data, new_data)`: Identifies changes <br>- `update_tax_rules(changes)`: Updates calculation parameters <br><br>**Instructions:** <br>1. Periodically scan official tax regulation sources <br>2. Compare with previously stored regulations <br>3. Extract and categorize changes (depreciation rates, deductible expenses) <br>4. Update system rules and affected calculations <br>5. Generate notification for users with affected properties <br><br>**Model Selection:** Balanced model for reliable text analysis <br><br>**Guardrails:** <br>- Source verification ensures only official sources used <br>- Change validation requires confidence threshold <br><br>**Human Intervention:** <br>- Trigger for major regulatory changes <br>- Required approval before updating core tax calculation rules |
 | **AI-004** | Property Description Analysis Capability | As an investor, I want to extract relevant investment parameters from property listings or descriptions. | **Specialized Agent Tool:** <br>- Implements AnalysisAgent capability using DocumentParser and LLMInterface tools <br>- Tasks: Extract structured data from unstructured property descriptions <br><br>**Reusable Tools:** <br>- `parse_property_text(description)`: Extracts key parameters <br>- `validate_extracted_data(data)`: Checks completeness and consistency <br>- `identify_missing_information(data)`: Determines critical gaps <br><br>**Instructions:** <br>1. Process raw property description text <br>2. Extract key parameters (size, units, condition, rents) <br>3. Validate extracted data for consistency and plausibility <br>4. Identify missing critical information <br>5. Populate appropriate system fields <br>6. Generate prompts for user to provide missing data <br><br>**Model Selection:** Smaller, faster model sufficient for standard extraction <br><br>**Guardrails:** <br>- PII filter removes sensitive information <br>- Data validation flags implausible values <br><br>**Human Intervention:** <br>- Trigger when critical data missing <br>- Trigger for ambiguous descriptions requiring interpretation |
@@ -459,8 +477,8 @@ flowchart TD
 
 | **Requirement ID** | **Description** | **User Story** | **Expected Behavior/Outcome** |
 |-------------------|-----------------|----------------|------------------------------|
-| **TI-001** | Agent Orchestration Framework | As a developer, I need a system to coordinate multiple AI agents working on different tasks. | **Manager Pattern Implementation:** <br>- Central AI Agent Orchestrator coordinates specialized agent tools <br>- TaskQueue manages synchronous and asynchronous agent operations <br>- ContextManager maintains shared context across agent interactions <br>- ResultsAggregator combines outputs from multiple agents <br>- Implements explicit guardrails at orchestration level <br>- Provides human escalation paths for complex scenarios <br><br>Framework must implement graceful failure handling and maintain comprehensive logging for debugging and auditing. |
-| **TI-002** | Reusable Tools Architecture | As a developer, I need well-defined, shareable tools that multiple agents can use. | Python-based tool library with standardized interfaces for: <br>- Web search and data retrieval (using libraries like Scrapy or Selenium) <br>- Document parsing and analysis <br>- Database queries and data storage <br>- LLM integration with context management <br><br>Each tool should include: <br>- Clear documentation of parameters and return values <br>- Input validation and error handling <br>- Telemetry for performance monitoring <br>- Integrated guardrails specific to tool functionality |
+| **TI-001** | Agent Orchestration Framework | As a developer, I need a system to coordinate multiple AI agents working on different tasks. | **Manager Pattern Implementation:** <br>- Central AI Agent Orchestrator coordinates specialized agent tools <br>- TaskQueue manages synchronous and asynchronous agent operations <br>- ContextManager maintains shared context across agent interactions <br>- SearchCoordinator implements tiered search strategy across multiple search providers <br>- ResultsAggregator combines outputs from multiple agents <br>- Implements explicit guardrails at orchestration level <br>- Provides human escalation paths for complex scenarios <br><br>Framework must implement:<br>- Graceful failure handling with automatic retries and fallbacks <br>- Cost optimization logic to balance API usage across search providers <br>- Intelligent caching to minimize redundant search queries <br>- Comprehensive logging for debugging and auditing |
+| **TI-002** | Reusable Tools Architecture | As a developer, I need well-defined, shareable tools that multiple agents can use. | Python-based tool library with standardized interfaces for: <br>- Search and data retrieval: <br>  * Google Search API integration <br>  * Bing Search API integration <br>  * Web scraping (using libraries like Scrapy or Selenium) <br>- Document parsing and analysis <br>- Database queries and data storage <br>- LLM integration with context management <br><br>Each tool should include: <br>- Clear documentation of parameters and return values <br>- Input validation and error handling <br>- Telemetry for performance monitoring <br>- API rate limiting and cost management <br>- Request caching to minimize redundant calls <br>- Fallback mechanisms between search providers <br>- Integrated guardrails specific to tool functionality |
 | **TI-003** | LLM Integration Architecture | As a developer, I need flexible integration with multiple LLM providers. | Abstraction layer that allows switching between different LLM providers (OpenAI, Anthropic, open-source models) with: <br>- Standardized input/output formats <br>- Efficient prompt template system <br>- Context window management <br>- Token optimization <br>- Model-specific parameter configuration <br>- Automatic fallback mechanisms <br><br>Implementation should intelligently select appropriate models based on task complexity, with capability to use simpler models for basic tasks and more powerful models for complex reasoning. |
 | **TI-004** | Agent Learning System | As a user, I want agents to improve based on my feedback and corrections. | Feedback collection system with: <br>- Explicit feedback mechanisms (ratings, corrections) <br>- Implicit feedback tracking (successful completions, retries) <br>- Feedback storage in structured database <br>- Mechanism to incorporate feedback into future responses <br>- Analytics dashboard for feedback trends <br><br>System should distinguish between user-specific preferences and global improvements, implementing retrieval-augmented generation to incorporate past successful interactions. |
 | **TI-005** | Multi-Layered Guardrails System | As a system administrator, I need comprehensive safety measures for AI agent operations. | Implement layered guardrails including: <br>- Relevance classifiers to ensure on-topic interactions <br>- Safety/injection checkers to prevent prompt manipulation <br>- PII filters to protect sensitive information <br>- Tool risk assessment for high-impact operations <br>- Output validation for quality control <br>- Rules-based protections (input limits, blocklists) <br><br>System must maintain audit logs of guardrail activations and provide configuration interface for adjusting guardrail sensitivity levels. |
@@ -489,10 +507,14 @@ flowchart TD
 - Implement user authentication and database storage
 
 **Phase 2: Tools and Basic AI Integration**
-- Develop reusable tool library (web search, document parsing, data analysis)
+- Develop reusable tool library:
+  * Implement Google Search API integration
+  * Implement Bing Search API integration
+  * Create web scraping tools for specialized data sources
+  * Build document parsing and data analysis tools
 - Implement basic guardrails system
 - Create LLM integration layer with model selection
-- Build foundation for AI Agent Orchestrator
+- Build foundation for AI Agent Orchestrator with Search Strategy Coordinator
 
 **Phase 3: Specialized Agent Capabilities**
 - Implement Market Data Search capability
@@ -526,10 +548,14 @@ flowchart TD
 
 **AI/ML Components**
 - LangChain for agent orchestration
-- Custom tools library for standardized agent tools
+- Custom tools library for standardized agent tools:
+  * Google Search API client
+  * Bing Search API client
+  * Scrapy/Selenium for targeted web scraping
 - OpenAI API for primary LLM integration with fallbacks
 - NumPy/Pandas for numerical processing
 - Scikit-learn for ML components
+- Redis for search request caching
 
 **Frontend**
 - React or Vue.js for UI framework
@@ -567,6 +593,9 @@ The modular architecture allows for incremental development and deployment, with
 - **Tool**: A reusable component that provides specific functionality to agents
 - **Manager Pattern**: An orchestration approach where a central agent coordinates specialized agents
 - **Guardrail**: A protective mechanism that ensures agent behavior stays within defined boundaries
+- **Search Strategy Coordinator**: Component that manages the tiered approach to using multiple search providers
+- **Tiered Search Strategy**: An approach that systematically tries multiple search methods in sequence until sufficient quality data is obtained
+- **Search Provider**: External service (like Google Search API or Bing Search API) that provides data retrieval capabilities
 
 ---
 
@@ -574,7 +603,8 @@ The modular architecture allows for incremental development and deployment, with
 
 | **Risk** | **Probability** | **Impact** | **Mitigation Strategy** |
 |----------|----------------|------------|-------------------------|
-| Data accuracy from web sources | High | High | Implement multi-source verification, clear confidence indicators, and regular validation checks |
+| Data accuracy from web sources | High | High | Implement multi-source verification across search engines, cross-check against specialized sources, use confidence indicators, and implement regular validation checks |
+| Search API limitations and costs | Medium | Medium | Implement intelligent API usage with fallback strategies, caching mechanisms, and cost-tracking analytics to optimize usage across providers |
 | LLM hallucinations in analysis | Medium | High | Use retrieval-augmented generation, implement fact checking, and clearly mark confidence levels for all agent-generated content |
 | Regulatory compliance issues | Medium | High | Regular updates to tax and rental regulations, clear disclaimers, and consultation with legal experts |
 | User adoption challenges | Medium | Medium | Focus on intuitive UI, provide comprehensive onboarding, and gather regular user feedback |

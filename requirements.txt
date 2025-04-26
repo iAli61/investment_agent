@@ -23,6 +23,11 @@ requests==2.31.0
 selenium==4.14.0
 scrapy==2.11.0
 pypdf==3.17.0
+openai-agents==0.0.13  # OpenAI Agents SDK
+pydantic-settings>=2.5.2  # Required for openai-agents
+typing-extensions>=4.12.2  # Required for openai-agents
+azure-identity>=1.15.0  # For Azure OpenAI authentication
+azure-ai-openai>=1.0.0  # Azure OpenAI SDK
 
 # Testing
 pytest==7.4.3

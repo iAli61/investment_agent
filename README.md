@@ -175,69 +175,149 @@ See the [Azure Deployment Guide](docs/azure-deployment.md) for detailed instruct
 ```
 investment_agent/
 ├── src/
-│   ├── ai_agents/            # AI agent implementations
-│   │   ├── base_agent.py     # Base agent class with common functionality
-│   │   ├── market_data_agent.py  # Market data collection agent
-│   │   ├── orchestrator.py   # Agent orchestration framework
-│   │   ├── rent_estimation_agent.py  # Rent estimation agent
-│   │   └── tools.py          # Tool implementations for agents
-│   ├── backend/              # Backend API
-│   │   ├── api.py            # FastAPI implementation
-│   ├── database/             # Database models and connections
-│   │   ├── database.py       # Database connection handling
-│   │   ├── models.py         # SQLAlchemy models
-│   ├── frontend/             # Frontend application
-│   │   ├── app.py            # Streamlit application
-│   └── utils/                # Utility functions
-│       ├── financial_utils.py  # Financial calculation utilities
-├── tests/                    # Test suites
-│   ├── unit/                 # Unit tests for individual components
-│   │   ├── ai_agents/        # Tests for AI agent functionality
-│   ├── integration/          # Integration tests
-│   └── e2e/                  # End-to-end tests
-├── docker/                   # Docker configuration
-│   ├── Dockerfile            # Docker image definition
-│   └── docker-compose.yml    # Multi-container setup
-├── docs/                     # Documentation
-│   ├── api/                  # API documentation
-│   ├── user-guide/           # User guide
-│   └── azure-deployment.md   # Azure deployment guide
-├── requirements.txt          # Package dependencies
-├── setup.py                  # Package setup
-├── pyproject.toml            # Python project configuration
-├── Dockerfile                # Main Dockerfile
-└── README.md                 # This file
+│   ├── ai_agents/                 # AI agent implementations
+│   │   ├── agent_system.py        # Main integration module for AI agents
+│   │   ├── guardrails/            # Safety mechanisms for agent behavior
+│   │   │   ├── agent_guardrails.py # Implementation of multi-layered guardrails
+│   │   ├── orchestrator/          # Agent orchestration framework
+│   │   │   ├── orchestrator.py    # Manager Pattern implementation
+│   │   │   ├── manager_agent.py   # Manager agent for coordinating specialized agents
+│   │   ├── specialized/           # Specialized agent implementations
+│   │   │   ├── market_data_agent.py  # Market data collection agent
+│   │   │   ├── rent_estimation_agent.py # Rent estimation agent
+│   │   │   ├── document_analysis_agent.py # Document processing agent
+│   │   │   ├── optimization_agent.py # Investment optimization agent
+│   │   ├── tools/                 # Tool implementations for agents
+│   │       ├── investment_tools.py # Shared tools for property investment analysis
+│   ├── backend/                   # Backend API
+│   │   ├── api.py                 # FastAPI implementation
+│   ├── database/                  # Database models and connections
+│   │   ├── database.py            # Database connection handling
+│   │   ├── models.py              # SQLAlchemy models
+│   ├── frontend/                  # Frontend application
+│   │   ├── app.py                 # Streamlit application
+│   └── utils/                     # Utility functions
+│       ├── financial_utils.py     # Financial calculation utilities
+├── tests/                         # Test suites
+│   ├── unit/                      # Unit tests for individual components
+│   │   ├── ai_agents/             # Tests for AI agent functionality
+│   ├── integration/               # Integration tests
+│   └── e2e/                       # End-to-end tests
+├── doc/                           # Documentation
+│   ├── a-practical-guide-to-building-agents/ # Guide for building AI agents
+├── example_usage.py               # Example script demonstrating the AI agent system
+├── requirements.txt               # Package dependencies
+├── setup.py                       # Package setup
+├── pyproject.toml                 # Python project configuration
+└── README.md                      # Project documentation
 ```
 
-## AI Agent System
+### Key Components
 
-The application uses a modular AI agent system with the following components:
+#### AI Agent System
+- **Agent Orchestrator**: Implements the Manager Pattern to coordinate specialized agents
+- **Manager Agent**: Central agent that delegates to specialized agents through tool calls
+- **Specialized Agents**: Purpose-built agents for different investment analysis tasks
+- **Reusable Tools**: Shared functionality for web search, data analysis, and document processing
+- **Guardrails**: Multi-layered safety mechanisms to ensure appropriate agent behavior
 
-1. **Base Agent (BaseAgent)**: Provides core functionality including:
-   - Execution tracking with iteration count
-   - Input validation
-   - Logging and monitoring
-   - Error handling and recovery
-   - Result formatting
+#### Backend
+- **FastAPI Server**: RESTful API for the application
+- **SQLAlchemy Models**: ORM models for database interaction
+- **Database Connection**: Handlers for database connections
 
-2. **Market Data Agent (MarketDataSearchAgent)**:
-   - Collects real estate market data for specific locations and property types
-   - Generates sample listings for analysis
-   - Calculates confidence levels for data reliability
-   - Supports different operations (buy/rent)
+#### Frontend
+- **Streamlit Application**: Interactive web interface
+- **Data Visualization**: Components for displaying investment metrics
 
-3. **Rent Estimation Agent (RentEstimationAgent)**:
-   - Estimates rental prices based on property characteristics
-   - Uses market data to improve estimation accuracy
-   - Factors in property features and condition
-   - Calculates per square meter rental values
+#### Infrastructure
+- **Azure OpenAI Integration**: Support for Azure OpenAI services
+- **Database Storage**: Models for storing property and market data
+- **Authentication**: User authentication and authorization
 
-4. **Agent Tools**:
-   - RealEstateSearchTool: Search for real estate listings
-   - MarketTrendTool: Analyze market trends
-   - RentEstimationTool: Estimate rental prices
+## AI Agent Architecture
 
-The orchestrator coordinates these agents to complete complex analytical tasks.
+The application implements a Manager Pattern AI architecture with specialized AI agents for different property investment analysis tasks. The system is designed with the following components:
+
+### Agent Architecture Components
+
+1. **Orchestrator**: Coordinates specialized agents and maintains context across interactions.
+   - Manages a task queue
+   - Routes tasks to appropriate agents
+   - Aggregates results from multiple agents
+   - Implements human escalation when needed
+
+2. **Manager Agent**: Central agent that delegates to specialized agents through tool calls.
+   - Understands user intents
+   - Plans sequences of agent calls
+   - Synthesizes results into cohesive responses
+   - Manages context between agent interactions
+
+3. **Specialized Agents**:
+   - **Market Data Search Agent**: Gathers current market data for target locations.
+   - **Rent Estimation Agent**: Estimates rental income based on property characteristics.
+   - **Document Analysis Agent**: Extracts key information from property documents.
+   - **Optimization Agent**: Suggests ways to optimize investment returns.
+
+4. **Reusable Tools**: Shared functionality that multiple agents can use:
+   - Web search tools for gathering market data
+   - Database query tools for retrieving property information
+   - Document parsing tools for extracting information
+   - Analysis tools for financial calculations
+
+5. **Guardrails**: Safety mechanisms that ensure agent behavior stays within defined boundaries:
+   - Relevance checkers to ensure on-topic interactions
+   - Safety checkers to prevent prompt manipulation
+   - PII filters to protect sensitive information
+   - Tool risk assessment for high-impact operations
+
+### Using the AI Agent System
+
+The system can be used in two ways:
+
+1. **Using the Manager Agent** (recommended): The manager agent coordinates specialized agents to complete complex tasks.
+
+```python
+from src.ai_agents import AIAgentSystem
+
+# Initialize the system
+agent_system = AIAgentSystem(model_name="gpt-4o")
+agent_system.initialize()
+
+# Process a user request using the manager agent
+async def process_request():
+    result = await agent_system.process_user_request(
+        "I'm considering buying a 2-bedroom apartment in Berlin. Can you analyze..."
+    )
+    return result
+```
+
+2. **Using Specialized Agents Directly**: For specific, focused tasks.
+
+```python
+# Execute a task with a specific agent
+async def get_market_data():
+    market_request = {
+        "location": "Berlin Mitte",
+        "property_type": "apartment",
+        "data_types": ["prices", "rents", "trends"]
+    }
+    result = await agent_system.execute_direct_task(
+        "market_data", 
+        json.dumps(market_request)
+    )
+    return result
+```
+
+### Key Benefits
+
+- **Modularity**: Each agent focuses on a specific capability, making the system easier to extend and maintain.
+- **Reusable Tools**: Common functionality is implemented once and shared across agents.
+- **Comprehensive Guardrails**: Multi-layered protection ensures safe and appropriate agent behavior.
+- **Flexible Integration**: Can be used with different LLM providers and models.
+- **Context Management**: Maintains information between agent interactions.
+
+See `example_usage.py` for a complete demonstration of the AI agent system.
 
 ## Testing the Application
 
@@ -304,3 +384,114 @@ We welcome contributions to the Property Investment Analysis App!
 - Streamlit for the interactive web interface
 - FastAPI for the high-performance backend
 - The real estate investment community for domain expertise
+
+## Azure OpenAI Integration
+
+### Overview
+
+The Property Investment Analysis Application can be deployed using Azure OpenAI services for enhanced enterprise features, including:
+
+- Regional data residency compliance
+- Azure Active Directory integration
+- Advanced security and compliance certifications
+- Centralized billing and resource management
+- Integration with other Azure services
+
+### Azure OpenAI Setup
+
+To use Azure OpenAI with this application:
+
+1. **Create an Azure OpenAI resource**:
+   ```bash
+   # Install Azure CLI if not already available
+   curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+   
+   # Login to Azure
+   az login
+   
+   # Create a resource group if needed
+   az group create --name property-investment-rg --location westeurope
+   
+   # Create Azure OpenAI resource
+   az cognitiveservices account create \
+     --name property-investment-openai \
+     --resource-group property-investment-rg \
+     --kind OpenAI \
+     --sku s0 \
+     --location westeurope
+   ```
+
+2. **Deploy required models**:
+   - Deploy `gpt-4o` or `gpt-35-turbo` for the manager agent
+   - Deploy smaller models for specialized tasks as needed
+
+3. **Configure environment variables**:
+   ```bash
+   # For Azure OpenAI
+   export AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+   export AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+   export AZURE_OPENAI_DEPLOYMENT_NAME=your_model_deployment_name
+   
+   # Or use Azure Managed Identity
+   export AZURE_OPENAI_USE_MANAGED_IDENTITY=true
+   ```
+
+### Using the Agent System with Azure OpenAI
+
+The AI agent system supports both OpenAI's standard API and Azure OpenAI. Here's how to initialize the agent system with Azure OpenAI:
+
+```python
+from src.ai_agents import AIAgentSystem
+
+# Initialize the system with Azure OpenAI
+agent_system = AIAgentSystem(
+    use_azure=True,
+    azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+)
+agent_system.initialize()
+
+# Process a user request using the manager agent
+async def process_request():
+    result = await agent_system.process_user_request(
+        "I'm considering buying a 2-bedroom apartment in Berlin. Can you analyze..."
+    )
+    return result
+```
+
+### Azure Architecture for Production Deployment
+
+For production deployments, we recommend:
+
+1. **Azure App Service**: For hosting the FastAPI backend
+2. **Azure Container Apps**: For hosting the Streamlit frontend
+3. **Azure Database for PostgreSQL**: For the application database
+4. **Azure Cache for Redis**: For caching search requests and agent context
+5. **Azure Key Vault**: For secure storage of API keys and secrets
+6. **Azure OpenAI Service**: For the LLM functionality
+7. **Azure Monitor & Application Insights**: For monitoring agent performance
+8. **Azure Front Door**: For global CDN and load balancing
+
+Here's a deployment architecture diagram:
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │
+│   Web Clients   │────▶│  Azure Front    │────▶│  Container Apps │
+│                 │     │  Door (CDN)     │     │  (Frontend)     │
+└─────────────────┘     └─────────────────┘     └────────┬────────┘
+                                                         │
+                                                         ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │
+│   Azure OpenAI  │◀───▶│   App Service   │◀───▶│  Azure Cache    │
+│   Service       │     │   (Backend)     │     │  for Redis      │
+└─────────────────┘     └────────┬────────┘     └─────────────────┘
+                                 │
+                                 ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │
+│   Azure Key     │◀───▶│  Azure DB for   │     │  Application    │
+│   Vault         │     │  PostgreSQL     │     │  Insights       │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
