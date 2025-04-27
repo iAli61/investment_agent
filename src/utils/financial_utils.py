@@ -291,9 +291,13 @@ def calculate_tax_benefits(building_value: float,
                           loan_amount: float,
                           interest_rate: float,
                           marginal_tax_rate: float,
-                          property_age_years: int) -> Dict[str, float]:
+                          property_age_years: int,
+                          annual_operating_expenses: float = 0,
+                          additional_werbungskosten: float = 0,
+                          use_progressive_tax: bool = False,
+                          other_income: float = 0) -> Dict[str, Any]:
     """
-    Calculate tax benefits from property investment
+    Calculate tax benefits from property investment according to German tax regulations
     
     Args:
         building_value: Value of the building (excluding land)
@@ -301,40 +305,131 @@ def calculate_tax_benefits(building_value: float,
         interest_rate: Annual interest rate in percentage
         marginal_tax_rate: Investor's marginal tax rate in percentage
         property_age_years: Age of the property in years
+        annual_operating_expenses: Annual operating expenses that can be tax-deductible
+        additional_werbungskosten: Additional income-related expenses beyond standard allowance
+        use_progressive_tax: Whether to use progressive tax calculation instead of flat rate
+        other_income: Other taxable income (relevant if use_progressive_tax is True)
         
     Returns:
-        Dictionary with tax benefit details
+        Dictionary with tax benefit details and visualization data
     """
     # Convert percentages to decimal
     interest_rate_decimal = interest_rate / 100
     marginal_tax_rate_decimal = marginal_tax_rate / 100
     
-    # Calculate depreciation rate based on property age
-    # In Germany, residential buildings are typically depreciated over 50 years (2% per year)
+    # Calculate depreciation rate based on property age and German regulations
+    # Standard rate for residential buildings is typically 2% per year (50 years linear depreciation)
     depreciation_rate = 0.02  # 2% per year
     
     # For buildings older than 2007, different rates may apply
     if property_age_years > 18:  # Built before 2007 (as of 2025)
         depreciation_rate = 0.025  # 2.5% per year
     
-    # Annual depreciation
+    # For historical buildings, even higher rates may apply under certain conditions
+    is_historical_building = False  # This would need to be passed as a parameter in a future enhancement
+    if is_historical_building:
+        depreciation_rate = 0.04  # 4% per year for historical buildings
+    
+    # Annual depreciation (AfA - Absetzung für Abnutzung)
     annual_depreciation = building_value * depreciation_rate
     
-    # Annual interest expense
+    # Annual interest expense (Schuldzinsen)
     annual_interest = loan_amount * interest_rate_decimal
     
-    # Total deductible expenses
-    total_deductible = annual_depreciation + annual_interest
+    # Standard Werbungskosten allowance for income from renting (Pauschale)
+    standard_werbungskosten = 1000  # As of 2023/2024
     
-    # Tax savings
-    tax_savings = total_deductible * marginal_tax_rate_decimal
+    # Calculate total Werbungskosten
+    # Operating expenses are considered Werbungskosten in German tax law
+    total_werbungskosten = max(standard_werbungskosten, annual_operating_expenses + additional_werbungskosten)
+    
+    # Werbungskosten above standard allowance
+    werbungskosten_above_standard = max(0, total_werbungskosten - standard_werbungskosten)
+    
+    # Total deductible expenses for tax purposes
+    total_deductible = annual_depreciation + annual_interest + werbungskosten_above_standard
+    
+    # Prepare tax brackets for progressive tax calculation if needed
+    tax_savings = 0
+    
+    if use_progressive_tax and other_income > 0:
+        # Simplified German income tax brackets (2023/2024)
+        def calculate_german_income_tax(income):
+            # Basic tax allowance (Grundfreibetrag)
+            grundfreibetrag = 11604  # for 2024
+            
+            if income <= grundfreibetrag:
+                return 0
+            
+            # Zone 1: 14% to 24%
+            elif income <= 17602:
+                y = (income - grundfreibetrag) / 10000
+                tax = (1088.67 * y + 1990) * y
+                
+            # Zone 2: 24% to 42%
+            elif income <= 66761:
+                z = (income - 17602) / 10000
+                tax = (206.43 * z + 2397) * z + 869.32
+                
+            # Zone 3: 42%
+            elif income <= 277826:
+                tax = 0.42 * income - 10642.82
+                
+            # Zone 4: 45%
+            else:
+                tax = 0.45 * income - 18952.97
+                
+            return tax
+        
+        # Calculate tax with and without the property deductions
+        tax_without_property = calculate_german_income_tax(other_income)
+        tax_with_property = calculate_german_income_tax(max(0, other_income - total_deductible))
+        
+        # Tax savings is the difference
+        tax_savings = tax_without_property - tax_with_property
+    else:
+        # Simple calculation based on marginal tax rate
+        tax_savings = total_deductible * marginal_tax_rate_decimal
+    
+    # Generate data for visualization
+    werbungskosten_data = []
+    for wk in range(0, 10001, 500):
+        effective_wk = max(standard_werbungskosten, annual_operating_expenses + wk)
+        wk_above_standard = max(0, effective_wk - standard_werbungskosten)
+        deductible = annual_depreciation + annual_interest + wk_above_standard
+        tax_benefit = deductible * marginal_tax_rate_decimal
+        
+        werbungskosten_data.append({
+            "werbungskosten": wk,
+            "total_deductible": deductible,
+            "tax_savings": tax_benefit
+        })
+    
+    # Generate data for marginal tax rate visualization
+    tax_rate_data = []
+    for rate in range(0, 51, 5):  # 0% to 50% in 5% steps
+        rate_decimal = rate / 100
+        tax_benefit = total_deductible * rate_decimal
+        
+        tax_rate_data.append({
+            "tax_rate": rate,
+            "tax_savings": tax_benefit
+        })
     
     return {
         "annual_depreciation": annual_depreciation,
         "annual_interest_expense": annual_interest,
+        "standard_werbungskosten": standard_werbungskosten,
+        "total_werbungskosten": total_werbungskosten,
+        "werbungskosten_above_standard": werbungskosten_above_standard,
         "total_deductible_expenses": total_deductible,
         "annual_tax_savings": tax_savings,
-        "monthly_tax_savings": tax_savings / 12
+        "monthly_tax_savings": tax_savings / 12,
+        "effective_tax_rate": (tax_savings / total_deductible * 100) if total_deductible > 0 else 0,
+        "visualization_data": {
+            "werbungskosten_impact": werbungskosten_data,
+            "tax_rate_impact": tax_rate_data
+        }
     }
 
 

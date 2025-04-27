@@ -16,7 +16,7 @@ from ..database.database import get_db
 from ..database.models import User, Property, RentalUnit, Expense, Financing, Analysis
 from ..ai_agents.orchestrator import orchestrator
 from ..ai_agents import AIAgentSystem
-from ..utils.financial_utils import analyze_property_investment
+from ..utils.financial_utils import analyze_property_investment 
 
 # Configure logging
 logger = logging.getLogger(__name__)

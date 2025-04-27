@@ -756,7 +756,8 @@ elif st.session_state.current_tab == "Expenses & Tax":
     ]
     
     expense_df = pd.DataFrame(expense_data, columns=["Expense", "Amount"])
-    expense_df["Amount"] = expense_df["Amount"].apply(lambda x: f"{x:.2f}%" if isinstance(x, str) else f"€{x:,.2f}")
+    # Fix the lambda function logic - only apply float formatting to non-string values
+    expense_df["Amount"] = expense_df["Amount"].apply(lambda x: x if isinstance(x, str) else f"€{x:,.2f}")
     
     st.table(expense_df)
     
@@ -773,6 +774,13 @@ elif st.session_state.current_tab == "Expenses & Tax":
         
         st.markdown(f"**Building Value**: €{building_value:,.2f}")
         st.markdown(f"**Land Value**: €{land_value:,.2f}")
+        
+        # Add additional Werbungskosten input
+        additional_werbungskosten = st.number_input("Additional Werbungskosten (€)", 
+                                                   min_value=0.0, 
+                                                   max_value=50000.0, 
+                                                   value=0.0,
+                                                   help="Additional income-related expenses beyond standard allowance")
     
     with col2:
         marginal_tax_rate = st.number_input("Your Marginal Tax Rate (%)", min_value=0.0, max_value=100.0, value=42.0)
@@ -783,33 +791,209 @@ elif st.session_state.current_tab == "Expenses & Tax":
         
         st.markdown(f"**Property Age**: {property_age} years")
         st.markdown(f"**Depreciation Rate**: {depreciation_rate*100:.1f}%")
+        
+        # Add option for progressive tax calculation
+        use_progressive_tax = st.checkbox("Use Progressive Tax Calculation", value=False,
+                                        help="Calculate tax benefits using German tax brackets instead of flat rate")
+        if use_progressive_tax:
+            other_income = st.number_input("Your Other Annual Income (€)", 
+                                         min_value=0.0, 
+                                         max_value=1000000.0, 
+                                         value=60000.0)
+    
+    # Get operating expenses for tax calculation
+    annual_expenses = total_expenses
     
     # Calculate tax benefits
-    annual_depreciation = building_value * depreciation_rate
-    
     # Get loan details from financing
     loan_amount = st.session_state.financing_data.get("loan_amount", 0) if hasattr(st.session_state, "financing_data") else 0
     interest_rate = st.session_state.financing_data.get("interest_rate", 0) if hasattr(st.session_state, "financing_data") else 0
     
-    annual_interest = loan_amount * (interest_rate / 100)
+    # Prepare parameters for enhanced tax calculation
+    tax_params = {
+        "building_value": building_value,
+        "loan_amount": loan_amount,
+        "interest_rate": interest_rate,
+        "marginal_tax_rate": marginal_tax_rate,
+        "property_age_years": property_age,
+        "annual_operating_expenses": annual_expenses,
+        "additional_werbungskosten": additional_werbungskosten,
+        "use_progressive_tax": use_progressive_tax,
+        "other_income": other_income if use_progressive_tax else 0
+    }
     
-    total_deductible = annual_depreciation + annual_interest
-    tax_savings = total_deductible * (marginal_tax_rate / 100)
+    # Import the calculate_tax_benefits function directly
+    from src.utils.financial_utils import calculate_tax_benefits
+    
+    # Calculate tax benefits with enhanced German tax logic
+    tax_benefits_result = calculate_tax_benefits(**tax_params)
+    
+    annual_depreciation = tax_benefits_result["annual_depreciation"]
+    annual_interest = tax_benefits_result["annual_interest_expense"]
+    standard_werbungskosten = tax_benefits_result["standard_werbungskosten"]
+    total_werbungskosten = tax_benefits_result["total_werbungskosten"]
+    werbungskosten_above_standard = tax_benefits_result["werbungskosten_above_standard"]
+    total_deductible = tax_benefits_result["total_deductible_expenses"]
+    tax_savings = tax_benefits_result["annual_tax_savings"]
+    effective_tax_rate = tax_benefits_result["effective_tax_rate"]
     
     # Display tax benefits
     st.markdown("### Tax Benefit Summary")
     tax_data = [
-        ("Annual Depreciation", annual_depreciation),
+        ("Annual Depreciation (AfA)", annual_depreciation),
         ("Annual Interest Expense", annual_interest),
+        ("Standard Werbungskosten Allowance", standard_werbungskosten),
+        ("Total Werbungskosten", total_werbungskosten),
+        ("Additional Deductible Werbungskosten", werbungskosten_above_standard),
         ("Total Deductible Expenses", total_deductible),
         ("Annual Tax Savings", tax_savings),
-        ("Monthly Tax Savings", tax_savings / 12)
+        ("Monthly Tax Savings", tax_savings / 12),
+        ("Effective Tax Rate", f"{effective_tax_rate:.2f}%")
     ]
-    
     tax_df = pd.DataFrame(tax_data, columns=["Item", "Amount"])
-    tax_df["Amount"] = tax_df["Amount"].apply(lambda x: f"€{x:,.2f}")
+    # Apply formatting except for the percentage value
+    tax_df["Amount"] = tax_df.apply(lambda row: row["Amount"] if isinstance(row["Amount"], str) else f"€{row['Amount']:,.2f}", axis=1)
     
     st.table(tax_df)
+    
+    # Visualizations
+    st.markdown("### Tax Benefit Visualizations")
+    
+    tab1, tab2 = st.tabs(["Werbungskosten Impact", "Tax Rate Impact"])
+    
+    with tab1:
+        # Get visualization data
+        werbungskosten_data = tax_benefits_result["visualization_data"]["werbungskosten_impact"]
+        
+        # Convert to DataFrame for plotting
+        wk_df = pd.DataFrame(werbungskosten_data)
+        
+        # Create the figure
+        fig = go.Figure()
+        
+        # Add trace for tax savings
+        fig.add_trace(go.Scatter(
+            x=wk_df["werbungskosten"],
+            y=wk_df["tax_savings"],
+            mode='lines+markers',
+            name='Tax Savings',
+            line=dict(color='#4CAF50', width=3)
+        ))
+        
+        # Add trace for total deductible
+        fig.add_trace(go.Scatter(
+            x=wk_df["werbungskosten"],
+            y=wk_df["total_deductible"],
+            mode='lines',
+            name='Total Deductible',
+            line=dict(color='#2196F3', width=2, dash='dash')
+        ))
+        
+        # Update layout
+        fig.update_layout(
+            title='Impact of Additional Werbungskosten on Tax Benefits',
+            xaxis_title='Additional Werbungskosten (€)',
+            yaxis_title='Amount (€)',
+            height=500,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("""
+        This chart shows how increasing your additional Werbungskosten (income-related expenses) 
+        impacts your total tax deductions and tax savings. The standard Werbungskosten allowance 
+        (€1,000) is automatically applied if you don't have higher expenses.
+        """)
+    
+    with tab2:
+        # Get visualization data
+        tax_rate_data = tax_benefits_result["visualization_data"]["tax_rate_impact"]
+        
+        # Convert to DataFrame for plotting
+        tr_df = pd.DataFrame(tax_rate_data)
+        
+        # Create the figure
+        fig = go.Figure()
+        
+        # Add trace for tax savings
+        fig.add_trace(go.Bar(
+            x=tr_df["tax_rate"],
+            y=tr_df["tax_savings"],
+            marker_color='#9C27B0',
+            name='Tax Savings'
+        ))
+        
+        # Add vertical line for current tax rate
+        fig.add_shape(
+            type="line",
+            x0=marginal_tax_rate, x1=marginal_tax_rate,
+            y0=0, y1=tr_df["tax_savings"].max() * 1.1,
+            line=dict(color="red", width=2, dash="dash")
+        )
+        
+        # Add annotation for current tax rate
+        fig.add_annotation(
+            x=marginal_tax_rate,
+            y=tr_df["tax_savings"].max() * 1.05,
+            text=f"Your Tax Rate: {marginal_tax_rate}%",
+            showarrow=True,
+            arrowhead=1,
+            ax=50,
+            ay=-40
+        )
+        
+        # Update layout
+        fig.update_layout(
+            title='Impact of Marginal Tax Rate on Annual Tax Savings',
+            xaxis_title='Marginal Tax Rate (%)',
+            xaxis=dict(ticksuffix="%"),
+            yaxis_title='Annual Tax Savings (€)',
+            height=500
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("""
+        This chart shows how your marginal tax rate affects your annual tax savings from this property investment.
+        In Germany, higher income investors typically benefit more from real estate tax advantages due to the 
+        progressive tax system.
+        """)
+    
+    # Explanation of German tax benefits for real estate
+    with st.expander("Learn more about German Tax Benefits for Real Estate"):
+        st.markdown("""
+        ### Understanding German Tax Benefits for Real Estate Investments
+        
+        Real estate investments in Germany offer several tax advantages:
+        
+        1. **Depreciation (AfA)**: You can deduct the building's value (not land) as an expense over time:
+           - 2% per year for buildings constructed after 2007 (50-year period)
+           - 2.5% per year for buildings constructed before 2007 (40-year period)
+           - Up to 4% for historical or protected buildings
+        
+        2. **Interest Deduction**: Interest paid on mortgage loans is fully deductible from rental income.
+        
+        3. **Werbungskosten**: All expenses related to generating rental income are deductible, including:
+           - Property management fees
+           - Maintenance and repairs
+           - Insurance premiums
+           - Property tax
+           - Travel costs for property visits
+           - Legal and accounting fees
+        
+        4. **Standard Allowance**: If your actual Werbungskosten are below €1,000, you can still claim the standard allowance.
+        
+        5. **Loss Offsetting**: Negative rental income can offset other income sources, reducing your overall tax burden.
+        
+        The German tax system is progressive, so the higher your income tax rate, the more valuable these deductions become.
+        """)
     
     # Save expenses and tax data
     if st.button("Save Expenses & Tax Details"):
@@ -902,156 +1086,176 @@ elif st.session_state.current_tab == "Analysis Results":
     
     # Display investment assessment
     cash_flow = summary.get("monthly_cash_flow", 0)
+    annual_cash_flow = summary.get("annual_cash_flow", 0)
     coc_return = summary.get("cash_on_cash", 0)
+    cap_rate = summary.get("cap_rate", 0)
+    
+    # Get additional details for more accurate assessment
+    mortgage_data = analysis.get("mortgage", {})
+    tax_benefits = analysis.get("tax_benefits", {})
+    financing = analysis.get("financing", {})
+    metrics = analysis.get("metrics", {})
+    
+    # Extract the total cash invested and loan details
+    loan_amount = mortgage_data.get("loan_amount", 0)
+    total_investment = metrics.get("total_investment", 0)
+    total_cash_invested = metrics.get("total_cash_invested", 0)
+    monthly_tax_savings = tax_benefits.get("monthly_tax_savings", 0) if tax_benefits else 0
+    leverage_ratio = loan_amount / total_investment if total_investment > 0 else 0
+    debt_service_coverage_ratio = summary.get("monthly_cash_flow", 0) / mortgage_data.get("monthly_payment", 1) if mortgage_data.get("monthly_payment", 0) > 0 else 0
     
     st.markdown("### Investment Assessment")
     
-    if cash_flow > 500 and coc_return > 8:
+    # More nuanced assessment logic based on German investment criteria
+    if cash_flow > 1000 and coc_return > 7 and cap_rate > 4:
         st.markdown('<div class="success-box">', unsafe_allow_html=True)
-        st.markdown("#### Strong Investment Opportunity")
-        st.markdown("This property appears to be an excellent investment with strong cash flow and returns.")
+        st.markdown("#### Excellent Investment Opportunity")
+        st.markdown(f"""
+        This property offers strong positive cash flow of {format_currency(cash_flow)}/month with an attractive cash-on-cash return of {coc_return:.2f}%. 
+        
+        **Key Strengths:**
+        - Strong monthly cash flow: {format_currency(cash_flow)}
+        - Excellent cash-on-cash return: {coc_return:.2f}%
+        - Solid cap rate: {cap_rate:.2f}%
+        - Tax benefits contribute significantly: {format_currency(monthly_tax_savings)}/month
+        
+        This investment meets the criteria for a high-performing German property investment with excellent tax advantages and strong rental income relative to expenses.
+        """)
         st.markdown('</div>', unsafe_allow_html=True)
-    elif cash_flow > 0 and coc_return > 5:
+    
+    elif cash_flow > 300 and coc_return > 5 and cap_rate > 3.5:
         st.markdown('<div class="info-box">', unsafe_allow_html=True)
-        st.markdown("#### Solid Investment Opportunity")
-        st.markdown("This property appears to be a solid investment with positive cash flow and reasonable returns.")
+        st.markdown("#### Strong Investment Opportunity")
+        st.markdown(f"""
+        This property offers good positive cash flow of {format_currency(cash_flow)}/month with a good cash-on-cash return of {coc_return:.2f}%.
+        
+        **Key Strengths:**
+        - Good monthly cash flow: {format_currency(cash_flow)}
+        - Solid cash-on-cash return: {coc_return:.2f}%
+        - Acceptable cap rate: {cap_rate:.2f}%
+        - Monthly tax benefit: {format_currency(monthly_tax_savings)}
+        
+        The property demonstrates solid investment characteristics with good tax benefits and positive cash flow typical of a successful German rental property.
+        """)
         st.markdown('</div>', unsafe_allow_html=True)
-    elif cash_flow > 0:
+    
+    elif cash_flow > 0 and coc_return > 3:
         st.markdown('<div class="warning-box">', unsafe_allow_html=True)
-        st.markdown("#### Marginal Investment Opportunity")
-        st.markdown("This property has positive cash flow but relatively low returns. Consider negotiating a better purchase price or finding ways to increase rental income.")
+        st.markdown("#### Decent Investment Opportunity with Potential")
+        st.markdown(f"""
+        This property offers modest positive cash flow of {format_currency(cash_flow)}/month with an acceptable cash-on-cash return of {coc_return:.2f}%.
+        
+        **Considerations:**
+        - Modest monthly cash flow: {format_currency(cash_flow)}
+        - Moderate cash-on-cash return: {coc_return:.2f}%
+        - Cap rate: {cap_rate:.2f}%
+        - Tax benefits help improve returns: {format_currency(monthly_tax_savings)}/month
+        
+        This investment offers positive cash flow, but returns are lower than ideal. Consider:
+        - Negotiating a better purchase price
+        - Finding ways to increase rental income
+        - Improving tax efficiency through additional Werbungskosten
+        - Adjusting financing terms for better cash flow
+        """)
         st.markdown('</div>', unsafe_allow_html=True)
+    
+    elif cash_flow > -200 and monthly_tax_savings > abs(cash_flow):
+        st.markdown('<div class="warning-box">', unsafe_allow_html=True)
+        st.markdown("#### Tax-Advantaged Investment")
+        st.markdown(f"""
+        This property has slightly negative cash flow of {format_currency(cash_flow)}/month, but significant tax advantages help offset this.
+        
+        **Key Considerations:**
+        - Slightly negative monthly cash flow: {format_currency(cash_flow)}
+        - Important tax benefits: {format_currency(monthly_tax_savings)}/month
+        - Cash-on-cash return: {coc_return:.2f}%
+        - Cap rate: {cap_rate:.2f}%
+        
+        This is a common scenario for German property investments where tax benefits are the primary advantage. The property may become cash-flow positive as:
+        - Rents increase over time
+        - Mortgage is paid down
+        - You optimize your tax situation further
+        
+        This investment might still make sense for high-income investors seeking tax advantages, but carries more risk than cash-flow positive properties.
+        """)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
     else:
         st.markdown('<div class="risk-box">', unsafe_allow_html=True)
-        st.markdown("#### Risky Investment")
-        st.markdown("This property has negative cash flow. It may be a speculative investment dependent on appreciation, which carries higher risk.")
+        st.markdown("#### High-Risk Investment")
+        st.markdown(f"""
+        This property has significant negative cash flow of {format_currency(cash_flow)}/month, which is not offset by tax benefits.
+        
+        **Risk Factors:**
+        - Negative monthly cash flow: {format_currency(cash_flow)}
+        - Tax benefits: {format_currency(monthly_tax_savings)}/month
+        - Cash-on-cash return: {coc_return:.2f}%
+        
+        This is a speculative investment dependent on:
+        - Significant future appreciation
+        - Substantial rental income growth
+        - Refinancing to better terms in the future
+        
+        Consider revisiting your assumptions, negotiating a lower purchase price, improving financing terms, or seeking an alternative property with better fundamentals.
+        """)
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # Detailed Results
-    st.markdown("### Detailed Results")
+    # Add a debt service coverage ratio assessment
+    st.markdown("### Risk Assessment")
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Cash Flow", "Investment Metrics", "Financing", "Expenses"])
+    # Calculate debt service coverage ratio (DSCR)
+    noi = analysis.get("cash_flow", {}).get("monthly_noi", 0)
+    debt_service = mortgage_data.get("monthly_payment", 0)
+    dscr = noi / debt_service if debt_service > 0 else float('inf')
     
-    with tab1:
-        # Cash flow analysis
-        cash_flow_data = analysis.get("cash_flow", {})
-        
-        # Create cash flow chart
-        fig = create_cash_flow_chart(cash_flow_data)
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Cash flow details
-        st.markdown("#### Cash Flow Details")
-        
-        cash_flow_details = [
-            ("Monthly Income", cash_flow_data.get("monthly_income", 0)),
-            ("Monthly Expenses", cash_flow_data.get("monthly_expenses", 0)),
-            ("Monthly Mortgage", cash_flow_data.get("monthly_mortgage", 0)),
-            ("Net Operating Income (NOI)", cash_flow_data.get("monthly_noi", 0)),
-            ("Cash Flow Before Tax", cash_flow_data.get("monthly_cash_flow_before_tax", 0)),
-            ("Monthly Tax Savings", cash_flow_data.get("monthly_tax_savings", 0)),
-            ("Cash Flow After Tax", cash_flow_data.get("monthly_cash_flow_after_tax", 0)),
-            ("Annual Cash Flow", cash_flow_data.get("annual_cash_flow_after_tax", 0))
-        ]
-        
-        cf_df = pd.DataFrame(cash_flow_details, columns=["Item", "Amount"])
-        cf_df["Amount"] = cf_df["Amount"].apply(lambda x: format_currency(x))
-        
-        st.table(cf_df)
+    dscr_col1, dscr_col2, dscr_col3 = st.columns(3)
     
-    with tab2:
-        # Investment metrics
-        metrics_data = analysis.get("metrics", {})
-        
-        # Create ROI metrics chart
-        fig = create_roi_chart(metrics_data)
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Investment details
-        st.markdown("#### Investment Details")
-        
-        investment_details = [
-            ("Total Investment", metrics_data.get("total_investment", 0)),
-            ("Total Cash Invested", metrics_data.get("total_cash_invested", 0)),
-            ("Cap Rate", f"{metrics_data.get('cap_rate_percentage', 0):.2f}%"),
-            ("Cash-on-Cash Return", f"{metrics_data.get('cash_on_cash_percentage', 0):.2f}%"),
-            ("ROI", f"{metrics_data.get('roi_percentage', 0):.2f}%")
-        ]
-        
-        inv_df = pd.DataFrame(investment_details, columns=["Metric", "Value"])
-        inv_df["Value"] = inv_df["Value"].apply(lambda x: x if isinstance(x, str) else format_currency(x))
-        
-        st.table(inv_df)
+    with dscr_col1:
+        st.metric("Debt Service Coverage Ratio", f"{dscr:.2f}x", 
+                 delta="Good" if dscr >= 1.25 else ("Acceptable" if dscr >= 1.0 else "Poor"))
     
-    with tab3:
-        # Financing details
-        mortgage_data = analysis.get("mortgage", {})
-        
-        # Create amortization chart
-        fig = create_amortization_chart(mortgage_data)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # Financing details
-        st.markdown("#### Financing Details")
-        
-        financing_details = [
-            ("Loan Amount", mortgage_data.get("loan_amount", 0)),
-            ("Interest Rate", f"{mortgage_data.get('interest_rate', 0):.2f}%"),
-            ("Repayment Rate", f"{mortgage_data.get('repayment_rate', 0):.2f}%"),
-            ("Term", f"{mortgage_data.get('term_years', 0)} years"),
-            ("Monthly Payment", mortgage_data.get("monthly_payment", 0)),
-            ("Annual Payment", mortgage_data.get("annual_payment", 0)),
-            ("Total Payments over Term", mortgage_data.get("total_payments", 0)),
-            ("Total Interest over Term", mortgage_data.get("total_interest", 0))
-        ]
-        
-        fin_df = pd.DataFrame(financing_details, columns=["Item", "Value"])
-        fin_df["Value"] = fin_df["Value"].apply(lambda x: x if isinstance(x, str) else format_currency(x))
-        
-        st.table(fin_df)
+    with dscr_col2:
+        loan_to_value = leverage_ratio * 100
+        st.metric("Loan-to-Value Ratio", f"{loan_to_value:.1f}%", 
+                 delta="Low Risk" if loan_to_value <= 60 else ("Medium Risk" if loan_to_value <= 80 else "High Risk"))
     
-    with tab4:
-        # Expenses details
-        expenses_data = analysis.get("expenses", {})
-        income_data = analysis.get("income", {})
+    with dscr_col3:
+        # Calculate break-even occupancy
+        expenses = analysis.get("expenses", {})
+        income = analysis.get("income", {})
         
-        # Create expenses pie chart
-        expense_items = [
-            ("Property Tax", expenses_data.get("property_tax_annual", 0)),
-            ("Insurance", expenses_data.get("insurance_annual", 0)),
-            ("Maintenance", expenses_data.get("maintenance_annual", 0)),
-            ("Management", expenses_data.get("management_annual", 0)),
-            ("Reserve Fund", expenses_data.get("reserve_annual", 0)),
-            ("Additional", expenses_data.get("additional_annual", 0))
-        ]
+        monthly_expenses = expenses.get("total_monthly_expenses", 0)
+        monthly_mortgage = mortgage_data.get("monthly_payment", 0)
+        potential_monthly_rent = income.get("potential_monthly_rent", 1)
         
-        expense_df = pd.DataFrame(expense_items, columns=["Category", "Amount"])
-        fig = px.pie(
-            expense_df, 
-            values="Amount", 
-            names="Category", 
-            title="Annual Expenses Breakdown",
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        break_even_occupancy = ((monthly_expenses + monthly_mortgage) / potential_monthly_rent) * 100 if potential_monthly_rent > 0 else 100
         
-        # Expense details
-        st.markdown("#### Expense Details")
-        
-        expense_details = [
-            ("Annual Gross Income", income_data.get("effective_annual_rent", 0)),
-            ("Vacancy Loss", income_data.get("vacancy_loss_annual", 0)),
-            ("Effective Gross Income", income_data.get("effective_annual_rent", 0)),
-            ("Total Annual Expenses", expenses_data.get("total_annual_expenses", 0)),
-            ("Expense Ratio", f"{expenses_data.get('expense_ratio', 0) * 100:.2f}%")
-        ]
-        
-        exp_df = pd.DataFrame(expense_details, columns=["Item", "Value"])
-        exp_df["Value"] = exp_df["Value"].apply(lambda x: x if isinstance(x, str) else format_currency(x))
-        
-        st.table(exp_df)
+        st.metric("Break-even Occupancy", f"{min(break_even_occupancy, 100):.1f}%", 
+                 delta="Low Risk" if break_even_occupancy <= 70 else ("Medium Risk" if break_even_occupancy <= 85 else "High Risk"))
     
+    # Add some risk analysis text
+    if dscr < 1.0:
+        st.markdown('<div class="risk-box">', unsafe_allow_html=True)
+        st.markdown("""
+        **Warning: Low Debt Service Coverage Ratio**
+        
+        Your property's income is not sufficient to cover the debt payments. This increases the risk of financial distress if there are vacancies or unexpected expenses.
+        Consider increasing rental income, reducing expenses, or improving loan terms.
+        """)
+        st.markdown('</div>', unsafe_allow_html=True)
+    elif break_even_occupancy > 85:
+        st.markdown('<div class="warning-box">', unsafe_allow_html=True)
+        st.markdown("""
+        **Caution: High Break-even Occupancy**
+        
+        Your property needs high occupancy to break even. This increases vulnerability to market downturns or periods of vacancy.
+        Consider strategies to increase rental income or reduce financing costs.
+        """)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# Footer or next steps can be added here if needed
+# Provide options to download reports, save the project, or start a new analysis
+
     # Next Steps
     st.markdown("### Next Steps")
     
