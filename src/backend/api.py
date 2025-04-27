@@ -384,6 +384,14 @@ async def get_market_data(request: MarketDataRequest, background_tasks: Backgrou
     # Log the available agent types for debugging
     logger.info(f"Available agent types: {list(orchestrator.specialized_agents.keys())}")
     
+    # Enhanced logging for market data request
+    logger.info(f"Market data request received: Location={request.location}, Property Type={request.property_type}")
+    if request.additional_filters:
+        logger.info(f"Additional filters: {json.dumps(request.additional_filters, default=str)}")
+    
+    # Log the task creation
+    logger.info(f"Creating market data task with ID: {task_id}")
+    
     # Create task for market data agent
     task = AgentTask(
         task_id=task_id,
@@ -397,24 +405,33 @@ async def get_market_data(request: MarketDataRequest, background_tasks: Backgrou
     )
     
     # Add task to orchestrator
+    logger.info(f"Adding task {task_id} to orchestrator queue")
     orchestrator.add_task(task)
     
+    # Log the current queue length
+    queue_size = orchestrator.task_queue.qsize() if hasattr(orchestrator.task_queue, 'qsize') else 'unknown'
+    logger.info(f"Current queue size: {queue_size}")
+    
     # Process task in background
+    logger.info(f"Starting background processing for task {task_id}")
     background_tasks.add_task(orchestrator.process_queue)
     
     return {"task_id": task_id, "status": "processing"}
 
 @app.get("/ai/tasks/{task_id}")
 async def get_task_result(task_id: str):
+    # Get the task result from the orchestrator
     result = orchestrator.get_result(task_id)
+    
+    # Get the current task status using our new tracking system
+    task_status = orchestrator.get_task_status(task_id)
+    logger.info(f"Task {task_id} status check: {task_status}")
+    
     if result is None:
-        task_status = "pending"
-        for task in orchestrator.task_queue.queue:
-            if task.task_id == task_id:
-                task_status = task.status
-                break
+        # If there's no result yet, return the current status from our tracking system
         return {"task_id": task_id, "status": task_status}
     
+    # If we have a result, task is completed
     return {"task_id": task_id, "status": "completed", "result": result}
 
 @app.post("/ai/rent-estimation/")

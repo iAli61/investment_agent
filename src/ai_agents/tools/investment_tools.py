@@ -77,11 +77,13 @@ def web_search(location: str, data_type: str) -> str:
     Returns:
         JSON string containing search results
     """
-    # This is a simulated function - in production would connect to web scraping service
-    logger.info(f"Searching for {data_type} data in {location}")
+    # Enhanced logging with more detailed information
+    logger.info(f"[Market Data] Starting web search for {data_type} data in {location}")
+    logger.info(f"[Market Data] Searching web sources for {location} {data_type}")
     
     # Simulate search results for demonstration
     if data_type == "prices":
+        logger.info(f"[Market Data] Accessing price data sources for {location}")
         result = {
             "average_price_sqm": 4500,
             "price_range": {"min": 3800, "max": 5200},
@@ -89,7 +91,9 @@ def web_search(location: str, data_type: str) -> str:
             "source": "realestate.example.com",
             "confidence": 0.85
         }
+        logger.info(f"[Market Data] Found price data: average {result['average_price_sqm']} EUR/sqm in {location}")
     elif data_type == "rents":
+        logger.info(f"[Market Data] Accessing rental data sources for {location}")
         result = {
             "average_rent_sqm": 25.5,
             "rent_range": {"min": 18, "max": 30},
@@ -97,7 +101,9 @@ def web_search(location: str, data_type: str) -> str:
             "source": "rentaldata.example.com",
             "confidence": 0.9
         }
+        logger.info(f"[Market Data] Found rental data: average {result['average_rent_sqm']} EUR/sqm in {location}")
     elif data_type == "trends":
+        logger.info(f"[Market Data] Accessing market trend sources for {location}")
         result = {
             "yearly_appreciation": 5.2,
             "forecast_5y": 18.5,
@@ -105,9 +111,12 @@ def web_search(location: str, data_type: str) -> str:
             "source": "markettrends.example.com",
             "confidence": 0.75
         }
+        logger.info(f"[Market Data] Found market trends: {result['yearly_appreciation']}% yearly appreciation in {location}")
     else:
+        logger.warning(f"[Market Data] Unknown data type requested: {data_type}")
         result = {"error": "Unknown data type", "confidence": 0}
     
+    logger.info(f"[Market Data] Web search completed for {location} {data_type} with confidence: {result.get('confidence', 0)}")
     return json.dumps(result)
 
 @function_tool
@@ -121,10 +130,16 @@ def parse_market_data(raw_data: str) -> str:
     Returns:
         Cleaned and normalized JSON string
     """
-    logger.info("Parsing market data")
+    logger.info("[Market Data] Starting to parse raw market data")
     
     try:
         data = json.loads(raw_data)
+        
+        # Log the data type being processed
+        data_sources = []
+        if "source" in data:
+            data_sources.append(data["source"])
+            logger.info(f"[Market Data] Processing data from source: {data['source']}")
         
         # This would contain more complex parsing logic in production
         parsed_data = {
@@ -133,9 +148,13 @@ def parse_market_data(raw_data: str) -> str:
             "timestamp": "2025-04-26T10:00:00Z"
         }
         
+        logger.info(f"[Market Data] Successfully parsed data with {len(data.keys())} fields")
+        if "confidence" in data:
+            logger.info(f"[Market Data] Data confidence score: {data['confidence']}")
+        
         return json.dumps(parsed_data)
     except Exception as e:
-        logger.error(f"Error parsing market data: {str(e)}")
+        logger.error(f"[Market Data] Error parsing market data: {str(e)}")
         return json.dumps({"error": str(e)})
 
 @function_tool
@@ -150,7 +169,8 @@ def query_market_data(location: str, property_type: str) -> str:
     Returns:
         JSON string with comparable properties data
     """
-    logger.info(f"Querying database for {property_type} in {location}")
+    logger.info(f"[Market Data] Querying database for {property_type} properties in {location}")
+    logger.info(f"[Market Data] Looking for comparable properties in database with location={location}, type={property_type}")
     
     # Simulate database query results
     comparables = [
@@ -182,6 +202,10 @@ def query_market_data(location: str, property_type: str) -> str:
             "condition": "average"
         }
     ]
+    
+    logger.info(f"[Market Data] Found {len(comparables)} comparable properties in {location}")
+    logger.info(f"[Market Data] Price range for comparable properties: {min([c['price'] for c in comparables])} - {max([c['price'] for c in comparables])} EUR")
+    logger.info(f"[Market Data] Rent range for comparable properties: {min([c['rent'] for c in comparables])} - {max([c['rent'] for c in comparables])} EUR/month")
     
     return json.dumps({"comparables": comparables})
 
@@ -461,16 +485,20 @@ def gather_historical_data(location: str, timeframe: str) -> str:
     Returns:
         JSON string with historical market data
     """
-    logger.info(f"Gathering historical data for {location} over {timeframe}")
+    logger.info(f"[Market Data] Starting to gather historical data for {location} over {timeframe}")
+    logger.info(f"[Market Data] Accessing historical database for {location} property values and rental rates")
     
     # In production, this would query a database or market data API
     
     if timeframe == "5 years":
         years = 5
+        logger.info(f"[Market Data] Retrieving 5-year historical data for {location}")
     elif timeframe == "10 years":
         years = 10
+        logger.info(f"[Market Data] Retrieving 10-year historical data for {location}")
     else:
         years = 3  # default
+        logger.info(f"[Market Data] Unrecognized timeframe '{timeframe}', defaulting to 3 years of data for {location}")
     
     # Generate simulated historical data
     current_year = 2025
@@ -478,20 +506,40 @@ def gather_historical_data(location: str, timeframe: str) -> str:
     base_price = 4000  # EUR per sqm
     base_rent = 20  # EUR per sqm
     
+    logger.info(f"[Market Data] Calculating historical trends for {location} from {current_year-years+1} to {current_year}")
+    
     for i in range(years):
         year = current_year - i
         # Apply a declining rate as we go back in time
         factor = 1 - (0.03 * i)
         
+        price_value = round(base_price * factor, 2)
+        rent_value = round(base_rent * factor, 2)
+        vacancy_rate = round(3 + (0.2 * i), 1)
+        
         history.append({
             "year": year,
-            "average_price_sqm": round(base_price * factor, 2),
-            "average_rent_sqm": round(base_rent * factor, 2),
-            "vacancy_rate": round(3 + (0.2 * i), 1),
+            "average_price_sqm": price_value,
+            "average_rent_sqm": rent_value,
+            "vacancy_rate": vacancy_rate,
             "source": "historical-db.example.com"
         })
+        
+        logger.info(f"[Market Data] {year} data: price={price_value} EUR/sqm, rent={rent_value} EUR/sqm, vacancy={vacancy_rate}%")
     
-    return json.dumps({"location": location, "history": history})
+    earliest_year = current_year - years + 1
+    price_change = round(((history[0]["average_price_sqm"] / history[-1]["average_price_sqm"]) - 1) * 100, 2)
+    rent_change = round(((history[0]["average_rent_sqm"] / history[-1]["average_rent_sqm"]) - 1) * 100, 2)
+    
+    logger.info(f"[Market Data] Historical analysis complete for {location} from {earliest_year} to {current_year}")
+    logger.info(f"[Market Data] Price appreciation over period: {price_change}%")
+    logger.info(f"[Market Data] Rent appreciation over period: {rent_change}%")
+    
+    return json.dumps({"location": location, "history": history, "summary": {
+        "price_appreciation": price_change,
+        "rent_appreciation": rent_change,
+        "years": years
+    }})
 
 @function_tool
 def search_development_news(location: str) -> str:
@@ -504,10 +552,14 @@ def search_development_news(location: str) -> str:
     Returns:
         JSON string with development news
     """
-    logger.info(f"Searching development news for {location}")
+    logger.info(f"[Market Data] Starting to search for development news in {location}")
+    logger.info(f"[Market Data] Querying news sources for recent development projects in {location}")
     
     # In production, this would use a news API or web scraping
     
+    logger.info(f"[Market Data] Filtering for recent and relevant development news for {location}")
+    
+    # Simulate news results
     news = [
         {
             "title": f"New Shopping Center Planned for {location}",
@@ -532,7 +584,22 @@ def search_development_news(location: str) -> str:
         }
     ]
     
-    return json.dumps({"location": location, "news": news})
+    logger.info(f"[Market Data] Found {len(news)} relevant development news items for {location}")
+    
+    # Log each news item with impact assessment
+    for item in news:
+        logger.info(f"[Market Data] Development news: {item['title']} (Impact: {item['impact']})")
+    
+    # Calculate impact statistics
+    impact_count = {"positive": 0, "negative": 0, "neutral": 0, "very positive": 0, "very negative": 0}
+    for item in news:
+        if item["impact"] in impact_count:
+            impact_count[item["impact"]] += 1
+    
+    logger.info(f"[Market Data] Development news impact summary for {location}: {impact_count}")
+    logger.info(f"[Market Data] Development news search completed for {location}")
+    
+    return json.dumps({"location": location, "news": news, "impact_summary": impact_count})
 
 @function_tool
 def generate_section_explanation(data: str, complexity_level: str) -> str:
@@ -546,7 +613,7 @@ def generate_section_explanation(data: str, complexity_level: str) -> str:
     Returns:
         Natural language explanation
     """
-    logger.info(f"Generating explanation at {complexity_level} level")
+    logger.info(f"[Market Data] Generating explanation at {complexity_level} level")
     
     try:
         section_data = json.loads(data)
@@ -564,7 +631,8 @@ def generate_section_explanation(data: str, complexity_level: str) -> str:
         else:
             explanation = f"Explanation for {section_type} at {complexity_level} level would be generated here."
         
+        logger.info(f"[Market Data] Generated a {len(explanation)} character explanation for {section_type}")
         return explanation
     except Exception as e:
-        logger.error(f"Error generating explanation: {str(e)}")
+        logger.error(f"[Market Data] Error generating explanation: {str(e)}")
         return f"Unable to generate explanation due to an error: {str(e)}"

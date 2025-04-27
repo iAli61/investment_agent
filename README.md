@@ -16,6 +16,491 @@ This application helps real estate investors make informed decisions by:
 
 The system integrates multiple AI agents to automate complex analytical tasks and deliver accurate, up-to-date information about potential property investments.
 
+## Detailed System Design
+
+### Architecture Overview
+
+The Property Investment Analysis App implements a modern multi-tiered architecture with a clear separation of concerns between different system components:
+
+```mermaid
+flowchart TD
+    subgraph "Presentation Layer"
+        UI[Streamlit Frontend]
+        API[FastAPI Endpoints]
+        CLI[CLI Tools]
+    end
+    
+    subgraph "Application Layer"
+        Controllers[API Controllers]
+        BackgroundTasks[Background Tasks]
+        Validation[Request Validation]
+    end
+    
+    subgraph "Domain Layer"
+        AgentSystem[AI Agent System]
+        BusinessLogic[Investment Analysis Logic]
+        FinancialEngine[Financial Calculation Engine]
+    end
+    
+    subgraph "Data Access Layer"
+        Repositories[Database Repositories]
+        ExternalAPI[External API Integration]
+        Cache[Caching Mechanisms]
+    end
+    
+    subgraph "Infrastructure Layer"
+        Database[(Database Storage)]
+        Auth[Authentication Services]
+        Logging[Logging and Monitoring]
+    end
+    
+    UI --> Controllers
+    API --> Controllers
+    CLI --> Controllers
+    
+    Controllers --> BusinessLogic
+    Controllers --> AgentSystem
+    BackgroundTasks --> AgentSystem
+    
+    BusinessLogic --> Repositories
+    AgentSystem --> ExternalAPI
+    AgentSystem --> Repositories
+    FinancialEngine --> Cache
+    
+    Repositories --> Database
+    ExternalAPI --> Auth
+    Cache --> Database
+    
+    Logging -.- UI
+    Logging -.- Controllers
+    Logging -.- AgentSystem
+    Logging -.- Repositories
+```
+
+#### System Layers
+
+1. **Presentation Layer**
+   - Streamlit-based web interface
+   - RESTful API endpoints for programmatic access
+   - CLI tools for administrative operations
+
+2. **Application Layer**
+   - API controllers for handling HTTP requests
+   - Background task processing for long-running operations
+   - Request validation and response formatting
+
+3. **Domain Layer**
+   - AI Agent System (core intelligence of the application)
+   - Investment analysis business logic
+   - Financial calculation engines
+
+4. **Data Access Layer**
+   - Database repositories
+   - External API integration
+   - Caching mechanisms
+
+5. **Infrastructure Layer**
+   - Database storage
+   - Authentication services
+   - Logging and monitoring
+
+### AI Agent System Architecture
+
+The AI agent system is built on the Manager Pattern, providing a scalable approach to complex property investment analysis:
+
+```mermaid
+flowchart TD
+    User[User] --> FrontendUI[Frontend UI]
+    FrontendUI --> API[FastAPI Backend]
+    API --> Orchestrator
+    
+    subgraph "AI Agent System"
+        Orchestrator[Task Orchestrator]
+        TaskQueue[Task Queue & Status]
+        ResultCache[Result Cache]
+        
+        subgraph "Manager Agent"
+            Manager[Manager LLM]
+            ContextManager[Context Manager]
+            PlanningEngine[Planning Engine]
+        end
+        
+        subgraph "Specialized Agents"
+            MarketAgent[Market Data Agent]
+            RentAgent[Rent Estimation Agent]
+            DocAgent[Document Analysis Agent]
+            OptAgent[Optimization Agent]
+        end
+        
+        subgraph "Tool Framework"
+            WebSearch[Web Search Tools]
+            DataProcessing[Data Processing Tools]
+            FinancialTools[Financial Calculation Tools]
+            DocumentTools[Document Processing Tools]
+        end
+        
+        subgraph "Guardrails"
+            SafetyCheckers[Safety Checkers]
+            RelevanceFilters[Relevance Filters]
+            ToolRisk[Tool Risk Assessment]
+        end
+    end
+    
+    ExternalSources[External Data Sources]
+    Database[(Investment Database)]
+    
+    API --> TaskQueue
+    Orchestrator --> Manager
+    Manager --> MarketAgent
+    Manager --> RentAgent
+    Manager --> DocAgent
+    Manager --> OptAgent
+    
+    MarketAgent --> WebSearch
+    RentAgent --> DataProcessing
+    DocAgent --> DocumentTools
+    OptAgent --> FinancialTools
+    
+    WebSearch <--> ExternalSources
+    DataProcessing --> Database
+    FinancialTools --> Database
+    
+    SafetyCheckers -.- Manager
+    SafetyCheckers -.- MarketAgent
+    SafetyCheckers -.- RentAgent
+    SafetyCheckers -.- DocAgent
+    SafetyCheckers -.- OptAgent
+    
+    Orchestrator --> TaskQueue
+    Orchestrator --> ResultCache
+    Manager <--> ContextManager
+    Manager <--> PlanningEngine
+```
+
+#### Key Components and Interactions
+
+1. **Orchestrator**
+   - **Purpose**: Central coordination component that manages tasks and delegates to specialized agents
+   - **Implementation**: 
+     - Task queue with priority management
+     - Asynchronous processing capability
+     - Result caching for improved performance
+     - Comprehensive status tracking with detailed logging
+   - **Communication Patterns**:
+     - Receives tasks from API endpoints
+     - Delegates to specialized agents
+     - Reports results back to API clients
+
+2. **Task Management System**
+   - **Task Creation**: Tasks are created with unique IDs and passed to the orchestrator
+   - **Status Tracking**: A dedicated tracking system monitors task status through their lifecycle
+   - **Error Handling**: Robust error recovery and reporting mechanisms
+   - **Results Cache**: Successful results are cached to prevent redundant processing
+
+3. **Specialized Agents**
+   - **Market Data Agent**
+     - Collects real-time market data for specific locations and property types
+     - Implements web search capabilities to find current property prices and trends
+     - Includes confidence scoring for data reliability
+     - Supports historical data analysis for trend identification
+   
+   - **Rent Estimation Agent**
+     - Analyzes comparable properties to estimate potential rental income
+     - Considers property-specific attributes (size, amenities, location)
+     - Accounts for local regulations including rent control
+     - Provides confidence intervals for estimates
+   
+   - **Document Analysis Agent**
+     - Extracts relevant information from property documents
+     - Identifies contractual obligations and restrictions
+     - Highlights key terms and conditions
+     - Summarizes important insights
+   
+   - **Optimization Agent**
+     - Analyzes current property setup for optimization opportunities
+     - Recommends financing adjustments
+     - Suggests operational improvements
+     - Quantifies potential ROI improvements
+
+4. **Agent Tool Framework**
+   - Shared utilities used by multiple agents
+   - Web search capabilities with content extraction
+   - Data processing and analysis functions
+   - Financial calculation tools
+
+### Data Flow Architecture
+
+The system follows a well-defined data flow that ensures efficient processing and information sharing:
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│             │     │             │     │             │     │             │
+│   Client    │────▶│  API Layer  │────▶│ Orchestrator│────▶│ Specialized │
+│  Interface  │     │             │     │             │     │   Agents    │
+│             │     │             │     │             │     │             │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                   │                   │                   │
+       │                   │                   │                   │
+       ▼                   ▼                   ▼                   ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│             │     │             │     │             │     │             │
+│   Response  │◀────│ Task Result │◀────│ Result Cache│◀────│  External   │
+│ Formatting  │     │ Processing  │     │             │     │   Sources   │
+│             │     │             │     │             │     │             │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+```
+
+#### Request Flow
+
+1. **Client Request Initiation**:
+   - User initiates request through UI or API endpoint
+   - Request is validated and normalized
+
+2. **Task Creation and Queueing**:
+   - System creates a task with unique identifier
+   - Task is added to the orchestrator's queue with appropriate priority
+   - Initial status tracking is established
+
+3. **Agent Processing**:
+   - Orchestrator delegates task to specialized agent(s)
+   - Agents execute their specialized routines
+   - Status updates are logged throughout processing
+
+4. **Result Aggregation and Delivery**:
+   - Results from agent processing are collected
+   - Data is cached for future reference
+   - Formatted response is returned to client
+   - Status is marked as completed
+
+### Database Schema
+
+The application uses a relational database with the following core tables:
+
+#### Entity-Relationship Diagram
+
+```
+┌────────────┐       ┌────────────┐       ┌────────────┐
+│            │       │            │       │            │
+│    User    │───1:N─┤  Property  │───1:N─┤ RentalUnit │
+│            │       │            │       │            │
+└────────────┘       └─────┬──────┘       └────────────┘
+                           │
+                           │
+                           │
+                     ┌─────┴──────┐       ┌────────────┐
+                     │            │       │            │
+                     │ Financing  │───1:N─┤  Expense   │
+                     │            │       │            │
+                     └─────┬──────┘       └────────────┘
+                           │
+                           │
+                           │
+                     ┌─────┴──────┐
+                     │            │
+                     │  Analysis  │
+                     │            │
+                     └────────────┘
+```
+
+#### Key Tables and Relationships
+
+1. **User**
+   - Stores user authentication and profile information
+   - One user can have multiple properties
+
+2. **Property**
+   - Contains core property information (address, purchase price, etc.)
+   - Linked to a user
+   - One property can have multiple rental units
+
+3. **RentalUnit**
+   - Represents individual units within a property
+   - Contains unit-specific details (size, layout, current rent)
+
+4. **Financing**
+   - Stores financing details for a property
+   - Includes loan amount, interest rate, terms
+
+5. **Expense**
+   - Records property expenses (taxes, insurance, maintenance)
+   - Linked to specific properties
+
+6. **Analysis**
+   - Stores the results of investment analyses
+   - Includes calculated metrics and AI-generated insights
+
+### Implementation Details
+
+#### Task Status Tracking System
+
+Our recently enhanced task status tracking system provides comprehensive visibility into task processing:
+
+```python
+def get_task_status(self, task_id: str) -> str:
+    """Get the current status of a task."""
+    # First check if we have a result already
+    if task_id in self.results_cache:
+        status = self.results_cache[task_id].status
+        logger.info(f"[Orchestrator] Retrieved status for task {task_id} from results cache: {status}")
+        return status
+        
+    # Then check the task_status dictionary
+    if task_id in self.task_status:
+        status = self.task_status[task_id]
+        logger.info(f"[Orchestrator] Retrieved status for task {task_id} from status tracker: {status}")
+        return status
+        
+    # If not found anywhere, it's unknown
+    logger.warning(f"[Orchestrator] No status information found for task {task_id}")
+    return "unknown"
+```
+
+The status tracking system includes:
+
+1. **Persistent Status Storage**: Task statuses are maintained even after tasks leave the queue
+2. **Detailed Status Logging**: Comprehensive logging shows status changes throughout task lifecycle
+3. **Status History**: The system maintains the full history of status changes
+4. **Graceful Error Handling**: Failed tasks are properly tracked with error details
+
+#### API Rate Limiting and Backoff Strategy
+
+When interacting with external APIs, the system implements sophisticated rate limiting:
+
+1. **Adaptive Backoff**: Exponential backoff with jitter for retries
+2. **Request Batching**: Grouping multiple requests to minimize API calls
+3. **Cache-First Strategy**: Checking cache before making external requests
+4. **Priority Queueing**: Critical requests take precedence in high-load situations
+
+#### Performance Optimizations
+
+To ensure the application remains responsive even under heavy load:
+
+1. **Asynchronous Processing**: Non-blocking I/O operations using Python's asyncio
+2. **Result Caching**: Storing frequently accessed data to minimize redundant processing
+3. **Query Optimization**: Efficient database queries with appropriate indexing
+4. **Resource Pooling**: Connection pooling for database and external API connections
+5. **Load Shedding**: Graceful degradation under extreme load conditions
+
+### Deployment Architecture on Azure
+
+For production deployments on Azure, we recommend the following architecture:
+
+```mermaid
+flowchart TD
+    Users[Web Users] --> AFD[Azure Front Door]
+    AFD --> ACA[Azure Container Apps<br>Streamlit Frontend]
+    AFD --> AppService[Azure App Service<br>FastAPI Backend]
+    
+    AppService <--> AzureOpenAI[Azure OpenAI Service]
+    AppService <--> Redis[Azure Cache for Redis]
+    AppService <--> PSQL[Azure DB for PostgreSQL<br>Flexible Server]
+    
+    ACA --> AppService
+    
+    PSQL --> PSQL_Backup[Automated Backups]
+    
+    subgraph "Security & Monitoring"
+        KeyVault[Azure Key Vault]
+        AAD[Azure Active Directory]
+        AppInsights[Application Insights]
+        Monitor[Azure Monitor]
+    end
+    
+    AppService --> KeyVault
+    AppService --> AAD
+    ACA --> AAD
+    AppService -.-> AppInsights
+    ACA -.-> AppInsights
+    AppInsights --> Monitor
+    
+    subgraph "Storage & Data"
+        BlobStorage[Azure Blob Storage]
+        CosmosDB[Azure Cosmos DB<br>Vector Store]
+    end
+    
+    AppService <--> BlobStorage
+    AppService <--> CosmosDB
+    
+    subgraph "Networking"
+        VNET[Azure Virtual Network]
+        PrivateEndpoints[Private Endpoints]
+        NSG[Network Security Groups]
+    end
+    
+    AppService -.-> VNET
+    PSQL -.-> PrivateEndpoints
+    KeyVault -.-> PrivateEndpoints
+    PrivateEndpoints -.-> VNET
+    VNET -.-> NSG
+```
+
+The system leverages multiple Azure services for a robust, scalable, and secure deployment:
+
+1. **Compute Services**
+   - **Azure App Service** (Premium v3 tier) for the FastAPI backend
+   - **Azure Container Apps** for the Streamlit frontend
+   - **Azure Functions** for periodic tasks and data updates
+
+2. **Storage & Database**
+   - **Azure Database for PostgreSQL Flexible Server** for relational data
+   - **Azure Blob Storage** for document storage
+   - **Azure Cache for Redis** for caching and session management
+
+3. **AI & Machine Learning**
+   - **Azure OpenAI Service** for LLM capabilities
+   - **Azure Cognitive Search** for semantic search
+   - **Azure Machine Learning** for custom model training and deployment
+
+4. **Security & Identity**
+   - **Azure Key Vault** for secret management
+   - **Azure Active Directory** for authentication and authorization
+   - **Azure Managed Identities** for secure service-to-service communication
+
+5. **Networking & Delivery**
+   - **Azure Front Door** for global routing and load balancing
+   - **Azure Virtual Network** with private endpoints
+   - **Azure DDoS Protection** for network security
+
+#### Azure Service Configuration
+
+For optimal performance and cost-efficiency, we recommend the following service configurations:
+
+1. **App Service**
+   - Premium v3 P1v3 (2 vCPU, 8 GiB memory)
+   - Auto-scaling: 2-5 instances based on CPU utilization (70% threshold)
+   - Deployment slots for blue-green deployments
+
+2. **PostgreSQL Flexible Server**
+   - General Purpose tier with 4 vCores
+   - 8 GiB RAM, 256 GiB storage
+   - Zone redundant high availability
+   - 7-day point-in-time restore
+
+3. **Azure OpenAI Service**
+   - gpt-4o model deployment with 10 TPM (tokens per minute) quota
+   - Standard tier with regional redundancy
+   - Private endpoints for secure access
+
+4. **Azure Container Apps**
+   - 1.0 vCPU, 2.0 GiB memory allocation
+   - Auto-scaling: 0-5 replicas based on HTTP traffic
+   - Custom domain with TLS encryption
+
+5. **Azure Cache for Redis**
+   - Standard C1 tier (2.5 GB, dedicated service)
+   - Data persistence with RDB snapshots every hour
+   - 99.9% SLA with geo-replication
+
+#### Azure Cost Optimization
+
+Our Azure deployment includes several cost optimization strategies:
+
+1. **Right-sized Resources**: Matching resource allocation to actual needs
+2. **Autoscaling**: Scaling down during low-traffic periods
+3. **Reserved Instances**: Using Azure Reserved Instances for predictable workloads
+4. **Azure Hybrid Benefit**: Leveraging existing licenses where possible
+5. **Resource Sharing**: Sharing resources across non-critical components
+
 ## Features
 
 ### Property Data Management
@@ -359,9 +844,29 @@ python -m pytest tests/unit
 
 # Run specific agent tests
 python -m pytest tests/unit/ai_agents
+
+# Run backend API tests
+python -m pytest tests/unit/backend
 ```
 
-Note: The test suite is currently being expanded and updated to match the latest implementation. Some tests may fail due to API changes in progress.
+Our test suite includes:
+
+1. **Backend API Tests**:
+   - Direct tests of API functions using SQLAlchemy models
+   - Tests for property, rental unit, and financing endpoints
+   - Mock tests for AI-related functionality
+
+2. **AI Agent Tests**:
+   - Tests for system initialization with both OpenAI and Azure OpenAI
+   - Verification of specialized agent factory functions
+   - Integration tests with mocked LLM clients
+   - Functional tests for agent behavior
+
+The test architecture follows these principles:
+- **Isolation**: Each component is tested independently
+- **Mocking**: External dependencies like OpenAI API calls are mocked
+- **Async Support**: Tests properly handle asynchronous functions with pytest-asyncio
+- **Resilience**: Tests focus on behavior rather than implementation details
 
 ### Integration Tests
 Run integration tests with:
@@ -373,6 +878,53 @@ python -m pytest tests/integration
 Run end-to-end tests with:
 ```bash
 python -m pytest tests/e2e
+```
+
+### Test Database
+The tests use an in-memory SQLite database to avoid affecting production data:
+```python
+# Example from our test setup
+def setup_test_db():
+    """Create test database and return a session factory"""
+    # Create the test database and tables
+    Base.metadata.create_all(bind=engine)
+    
+    # Create session factory
+    def _get_test_db():
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+    
+    return _get_test_db
+```
+
+### Running Tests in CI/CD
+Our tests are designed to run in CI/CD pipelines, with the following recommended workflow:
+
+```yaml
+# Example GitHub Actions workflow
+name: Run Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          uv pip install -e ".[dev]"
+      - name: Run tests
+        run: python -m pytest tests/
 ```
 
 ## Development Status
@@ -543,45 +1095,22 @@ Here's a deployment architecture diagram:
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │                 │     │                 │     │                 │
-│   Web Clients   │────▶│  Azure Front    │────▶│  Container Apps │
-│                 │     │  Door (CDN)     │     │  (Frontend)     │
-└─────────────────┘     └─────────────────┘     └────────┬────────┘
+│   Web Clients   │────▶│  API Layer     │────▶│  Orchestrator   │
+│                 │     │                 │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
                                                          │
                                                          ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │
-│   Azure OpenAI  │◀───▶│   App Service   │◀───▶│  Azure Cache    │
-│   Service       │     │   (Backend)     │     │  for Redis      │
-└─────────────────┘     └────────┬────────┘     └─────────────────┘
-                                 │
-                                 ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │
-│   Azure Key     │◀───▶│  Azure DB for   │     │  Application    │
-│   Vault         │     │  PostgreSQL     │     │  Insights       │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                ┌─────────────────┐
+                                                │                 │
+                                                │   Result Cache  │
+                                                │                 │
+                                                └─────────────────┘
+                                                         │
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │                 │
+                                                │  External Data  │
+                                                │     Sources     │
+                                                │                 │
+                                                └─────────────────┘
 ```
-
-## Version History
-
-- **v0.1.0** (April 2025): Initial release with core functionality
-  - Basic property analysis capabilities
-  - Integration with AI agents for market research
-  - Streamlit frontend and FastAPI backend
-
-## Roadmap
-
-- **Q2 2025**: 
-  - Advanced financial modeling
-  - Multiple property comparison
-  - Portfolio analysis dashboard
-
-- **Q3 2025**:
-  - Mobile app support
-  - Real-time market alerts
-  - Advanced tax optimization
-
-- **Q4 2025**:
-  - Multi-user collaboration
-  - Integration with popular real estate listing platforms
-  - Custom reporting templates
