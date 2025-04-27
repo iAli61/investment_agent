@@ -64,3 +64,6 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+investment_analysis.db
+langchain-llm.txt
+uv.lock

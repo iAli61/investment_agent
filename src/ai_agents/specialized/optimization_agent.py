@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional
 import json
 
-from agents import Agent, function_tool
+from agents import Agent, function_tool, OpenAIChatCompletionsModel
 from pydantic import BaseModel
 
 from ..tools.investment_tools import (
@@ -74,11 +74,33 @@ def create_optimization_agent() -> Agent:
     
     Ensure all recommendations comply with legal requirements and include any risks or potential downsides.
     """
+
+    from openai import AsyncAzureOpenAI
+    from agents import set_default_openai_client
+    from dotenv import load_dotenv
+    import os
+
+    # Load environment variables
+    load_dotenv()
+    # Create OpenAI client using Azure OpenAI
+    openai_client = AsyncAzureOpenAI(
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+    )
+
+    # Set the default OpenAI client for the Agents SDK
+    set_default_openai_client(openai_client)
     
     # Create and return the agent
     return Agent(
         name="Optimization Agent",
         instructions=instructions,
+        model=OpenAIChatCompletionsModel(
+            model="gpt-4o",
+            openai_client=openai_client
+        ),
         tools=[
             analyze_investment_efficiency,
             simulate_optimizations,

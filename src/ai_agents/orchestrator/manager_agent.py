@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional
 import json
 
-from agents import Agent, function_tool
+from agents import Agent, function_tool, OpenAIChatCompletionsModel
 from pydantic import BaseModel
 
 # Configure logging
@@ -23,7 +23,7 @@ class ManagerAgentResult(BaseModel):
     results: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
-def create_manager_agent(specialized_agents: Dict[str, Agent]) -> Agent:
+def create_manager_agent(specialized_agents: Dict[str, Agent], model: str = "gpt-4o") -> Agent:
     """
     Create and configure the Manager Agent that coordinates specialized agents.
     
@@ -75,11 +75,33 @@ def create_manager_agent(specialized_agents: Dict[str, Agent]) -> Agent:
     limitations and suggest alternative approaches.
     """
     
+    from openai import AsyncAzureOpenAI
+    from agents import set_default_openai_client
+    from dotenv import load_dotenv
+    import os
+
+    # Load environment variables
+    load_dotenv()
+    # Create OpenAI client using Azure OpenAI
+    openai_client = AsyncAzureOpenAI(
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+    )
+
+    # Set the default OpenAI client for the Agents SDK
+    set_default_openai_client(openai_client)
+
     # Create and return the agent
     return Agent(
         name="Investment Analysis Manager",
         instructions=instructions,
-        tools=agent_tools
+        tools=agent_tools,
+        model=OpenAIChatCompletionsModel(
+            model=model,
+            openai_client=openai_client
+        ),
     )
 
 def _get_agent_description(agent_type: str) -> str:

@@ -109,27 +109,6 @@ uv pip install -e .
 uv pip install -e ".[dev]"
 ```
 
-Using pip (alternative):
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Linux/macOS
-# Or on Windows: .venv\Scripts\activate
-
-pip install -e .
-# Or with development dependencies
-pip install -e ".[dev]"
-
-# Make sure to install pytest-asyncio for async tests
-pip install pytest-asyncio
-```
-
-3. Set up environment variables:
-```bash
-# For development
-export DATABASE_URL=sqlite:///./investment_analysis.db
-export API_URL=http://localhost:8000
-export OPENAI_API_KEY=your_openai_api_key  # Required for AI agents
-```
 
 ### Running the Application
 

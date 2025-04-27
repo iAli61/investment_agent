@@ -19,6 +19,8 @@ from .specialized import (
     create_optimization_agent
 )
 from .guardrails import create_guardrails
+from openai import AsyncAzureOpenAI
+from agents import set_default_openai_client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -113,6 +115,17 @@ class AIAgentSystem:
                     "without managed identity"
                 )
             os.environ["OPENAI_API_KEY"] = os.environ.get("AZURE_OPENAI_API_KEY")
+
+        # Create OpenAI client using Azure OpenAI
+        openai_client = AsyncAzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+            azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+        )
+
+        # Set the default OpenAI client for the Agents SDK
+        set_default_openai_client(openai_client)
         
         # When using Azure, the model_name should be the deployment name
         self.model_name = self.azure_deployment
@@ -172,7 +185,7 @@ class AIAgentSystem:
         
         try:
             # Create manager agent with specialized agents as tools
-            self.manager_agent = create_manager_agent(self.specialized_agents)
+            self.manager_agent = create_manager_agent(self.specialized_agents, model=self.model_name)
             
             # Apply guardrails to manager agent safely
             if not hasattr(self.manager_agent, 'guardrails'):

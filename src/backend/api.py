@@ -52,9 +52,21 @@ async def startup_event():
     global ai_agent_system
     
     try:
+        # Initialize database tables and default data
+        from ..database.database import create_tables, init_db
+        
+        # Create tables if they don't exist
+        logger.info("Creating database tables if they don't exist")
+        create_tables()
+        
+        # Initialize database with default data
+        logger.info("Initializing database with default data")
+        init_db()
+        
         # Check if Azure OpenAI environment variables are available
         use_azure = os.environ.get("USE_AZURE_OPENAI", "false").lower() == "true"
         if use_azure:
+            logger.info("Using Azure OpenAI")
             azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
             azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME")
             azure_api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2023-07-01-preview")
@@ -62,6 +74,7 @@ async def startup_event():
             
             # Initialize with Azure OpenAI if environment variables are set
             if azure_endpoint and azure_deployment:
+                logger.info(f"Using Azure OpenAI with endpoint: {azure_endpoint} and deployment: {azure_deployment}")
                 ai_agent_system = AIAgentSystem(
                     use_azure=True,
                     azure_deployment=azure_deployment,
@@ -71,9 +84,11 @@ async def startup_event():
                 )
             else:
                 # Fall back to standard OpenAI if Azure config is incomplete
+                logger.warning("Azure OpenAI configuration incomplete. Falling back to standard OpenAI.")
                 ai_agent_system = AIAgentSystem(model_name="gpt-4o")
         else:
             # Standard OpenAI initialization
+            logger.info("Using Standard OpenAI")
             ai_agent_system = AIAgentSystem(model_name="gpt-4o")
             
         # Initialize the AI agent system

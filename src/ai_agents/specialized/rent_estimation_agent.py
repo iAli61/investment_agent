@@ -8,7 +8,7 @@ import logging
 from typing import Dict, Any, List, Optional
 import json
 
-from agents import Agent, function_tool
+from agents import Agent, function_tool, OpenAIChatCompletionsModel
 from pydantic import BaseModel
 
 from ..tools.investment_tools import (
@@ -70,10 +70,32 @@ def create_rent_estimation_agent() -> Agent:
     impact on your estimate.
     """
     
+    from openai import AsyncAzureOpenAI
+    from agents import set_default_openai_client
+    from dotenv import load_dotenv
+    import os
+
+    # Load environment variables
+    load_dotenv()
+    # Create OpenAI client using Azure OpenAI
+    openai_client = AsyncAzureOpenAI(
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+    )
+
+    # Set the default OpenAI client for the Agents SDK
+    set_default_openai_client(openai_client)
+
     # Create and return the agent
     return Agent(
         name="Rent Estimation Agent",
         instructions=instructions,
+        model=OpenAIChatCompletionsModel(
+            model="gpt-4o",
+            openai_client=openai_client
+        ),
         tools=[
             query_market_data,
             analyze_comparables,
