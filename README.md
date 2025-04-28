@@ -579,16 +579,28 @@ Using uv (recommended):
 ```bash
 # Install uv if you don't have it
 # On Linux/macOS
-curl -sSf https://astral.sh/uv/install.sh | bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# or
+wget -qO- https://astral.sh/uv/install.sh | sh
+
 # Or on Windows
-curl.exe -sSf https://astral.sh/uv/install.ps1 | powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | more"
 
 # Set up a virtual environment and install dependencies with uv
 uv venv
 source .venv/bin/activate  # On Linux/macOS
 # Or on Windows: .venv\Scripts\activate
+```
+## 2. Install Python packages and dependencies
 
-# Install dependencies with uv
+To install all required packages from a `pyproject.toml` file (such as the one located at the top level of this GitHub repository), run the following command, assuming the file is in the same directory as your terminal session:
+
+```bash
+uv sync --dev --python 3.11
+```
+
+# OR Install dependencies with uv pip
+```bash
 uv pip install -e .
 # Or with development dependencies
 uv pip install -e ".[dev]"

@@ -68,3 +68,5 @@ investment_analysis.db
 langchain-llm.txt
 uv.lock
 src/backend/__pycache__/api.cpython-310.pyc
+vector_db
+agent_memory.json

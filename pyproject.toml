@@ -23,6 +23,7 @@ dependencies = [
     # Base dependencies
     "fastapi>=0.108.0",  # Updated to support anyio 4.5+
     "uvicorn==0.23.2",
+    "pydantic>=2.0.0",  # Added from requirements.txt
     "python-dotenv==1.0.0",
     "sqlalchemy==2.0.23",
     "alembic==1.12.1",
@@ -33,15 +34,22 @@ dependencies = [
     "numpy==1.26.1",
     # AI Agent dependencies
     "langchain>=0.1.0",  # Updated to support anyio 4.5+
+    "langchain-core>=0.1.0",  # Added from requirements.txt
     "langchain-community>=0.0.11",  # Updated for compatibility with newer langchain
-    "openai",
+    "langchain-experimental>=0.0.9",  # Added from requirements.txt
+    "langgraph>=0.0.19",  # Added from requirements.txt
+    "openai>=1.6.0",  # Updated version
     "anthropic>=0.8.0",  # Updated to support anyio 4.5+
     "chromadb==0.4.18",
+    "chroma-hnswlib",  # Added from requirements.txt
+    "faiss-cpu",  # Changed from faiss-gpu to faiss-cpu for Python 3.11 compatibility
+    "sentence-transformers>=2.2.2",  # Added from requirements.txt
     "beautifulsoup4==4.12.2",
     "requests==2.31.0",
     "selenium==4.14.0",
     "scrapy==2.11.0",
     "pypdf==3.17.0",
+    "langsmith>=0.0.43",  # Added from requirements.txt
     "openai-agents==0.0.13",  # OpenAI Agents SDK
     "pydantic-settings>=2.5.2",  # Required for openai-agents
     "typing-extensions>=4.12.2",  # Required for openai-agents
@@ -82,7 +90,7 @@ python_files = "test_*.py"
 
 [tool.black]
 line-length = 88
-target-version = ["py39"]
+target-version = ["py311"]
 include = '\.pyi?$'
 
 [tool.isort]
@@ -90,19 +98,19 @@ profile = "black"
 line_length = 88
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py311"
 line-length = 88
 select = ["E", "F", "B"]
 ignore = []
 
 [tool.uv]
 # Configuration options for uv package manager
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 editable-mode = "development"

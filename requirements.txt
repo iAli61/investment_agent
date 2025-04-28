@@ -1,7 +1,7 @@
 # Base dependencies
 fastapi>=0.108.0  # Updated to support anyio 4.5+
 uvicorn==0.23.2
-pydantic
+pydantic>=2.0.0
 python-dotenv==1.0.0
 sqlalchemy==2.0.23
 alembic==1.12.1
@@ -13,21 +13,39 @@ pandas==2.1.2
 numpy==1.26.1
 
 # AI Agent dependencies
-langchain>=0.1.0  # Updated to support anyio 4.5+
-langchain-community>=0.0.11  # Updated for compatibility with newer langchain
-openai
-anthropic>=0.8.0  # Updated to support anyio 4.5+
-chromadb==0.4.18
+langchain>=0.1.0  # Core LangChain framework
+langchain-core>=0.1.0  # Core abstractions
+langchain-community>=0.0.11  # Community integrations
+langchain-experimental>=0.0.9  # Experimental features
+langgraph>=0.0.19  # For complex agent workflows
+
+# LLM Providers
+openai>=1.6.0  # OpenAI Python client
+anthropic>=0.8.0  # Anthropic Python client
+azure-identity>=1.15.0  # For Azure OpenAI authentication
+
+# Vector Database & Embeddings
+chromadb==0.4.18  # Chroma vector database
+chroma-hnswlib
+faiss-cpu  # FAISS vector database (CPU version)
+sentence-transformers>=2.2.2  # For embeddings
+
+# Text Processing & Web
 beautifulsoup4==4.12.2
 requests==2.31.0
 selenium==4.14.0
 scrapy==2.11.0
 pypdf==3.17.0
+
+# Tracing & Evaluation
+langsmith>=0.0.43  # For tracing and evaluation
+
+# Legacy Agents integration (will be migrated to LangGraph)
 openai-agents==0.0.13  # OpenAI Agents SDK
 pydantic-settings>=2.5.2  # Required for openai-agents
 typing-extensions>=4.12.2  # Required for openai-agents
-azure-identity>=1.15.0  # For Azure OpenAI authentication
 
 # Testing
 pytest==7.4.3
 pytest-cov==4.1.0
+pytest-asyncio==0.21.1  # For async tests
