@@ -35,12 +35,49 @@ class PIICheckResult(BaseModel):
     pii_types: Optional[List[str]] = None
     redacted_text: Optional[str] = None
 
-def create_guardrails() -> List[Callable]:
+class JSONSchemaCheckResult(BaseModel):
+    contains_invalid_json: bool
+    error_message: Optional[str] = None
+    model_config = {"extra": "forbid"}
+
+async def output_schema_guardrail(
+    ctx: RunContextWrapper,
+    agent: Agent,
+    input: List[TResponseInputItem]
+) -> GuardrailFunctionOutput:
+    """
+    Guardrail to ensure tool outputs are valid JSON.
+    """
+    # Check recent messages for tool outputs
+    for msg in getattr(ctx.context, 'messages', []):
+        if hasattr(msg, 'role') and msg.role == 'tool' and hasattr(msg, 'content'):
+            content = msg.content
+            try:
+                json.loads(content)
+            except Exception as e:
+                result = JSONSchemaCheckResult(
+                    contains_invalid_json=True,
+                    error_message=str(e)
+                )
+                logger.warning(f"JSON schema guardrail triggered: invalid JSON from tool: {str(e)}")
+                return GuardrailFunctionOutput(
+                    output_info=result.dict(),
+                    tripwire_triggered=True
+                )
+    # All tool outputs valid JSON
+    result = JSONSchemaCheckResult(contains_invalid_json=False)
+    return GuardrailFunctionOutput(
+        output_info=result.dict(),
+        tripwire_triggered=False
+    )
+
+async def create_guardrails() -> List[Callable]:
     """Create and return a list of guardrail functions."""
     return [
         relevance_check_guardrail,
         safety_check_guardrail,
-        pii_filter_guardrail
+        pii_filter_guardrail,
+        output_schema_guardrail
     ]
 
 async def relevance_check_guardrail(

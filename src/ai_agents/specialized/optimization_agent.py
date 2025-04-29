@@ -38,16 +38,67 @@ class OptimizationResult(BaseModel):
     timeframes: Dict[str, Any]
     explanation: str
 
+# Check for LangChain dependencies
+try:
+    from langchain_community.utilities import GoogleSerperAPIWrapper
+    from langchain_community.document_loaders import WebBaseLoader
+    has_langchain = True
+    logger.info("[Optimization] LangChain dependencies loaded")
+except ImportError:
+    has_langchain = False
+    logger.warning("[Optimization] LangChain dependencies not available")
+
+if has_langchain:
+    @function_tool
+    def search_optimization_insights_with_langchain(topic: str) -> str:
+        """
+        Search for industry insights related to optimization strategies using LangChain.
+        """
+        logger.info(f"[Optimization] Searching optimization insights for {topic} via LangChain")
+        try:
+            search = GoogleSerperAPIWrapper()
+            results = search.results(f"real estate optimization strategies {topic}")
+            items = results.get("organic", [])[:5]
+            return json.dumps([{"title": it.get("title"), "snippet": it.get("snippet"), "link": it.get("link")} for it in items])
+        except Exception as e:
+            logger.error(f"[Optimization] LangChain search error: {e}")
+            return json.dumps({"error": str(e)})
+
+    @function_tool
+    def analyze_performance_trends_with_langchain(historical_data: str) -> str:
+        """
+        Analyze performance trends using historical financial and market data.
+        """
+        logger.info("[Optimization] Analyzing performance trends with LangChain")
+        try:
+            data = json.loads(historical_data)
+            loader = WebBaseLoader(data.get("source_url"))
+            docs = loader.load()
+            text = docs[0].page_content if docs else ""
+            trend = "upward" if "growth" in text else "stable"
+            return json.dumps({"trend": trend})
+        except Exception as e:
+            logger.error(f"[Optimization] Trend analysis error: {e}")
+            return json.dumps({"error": str(e)})
+
 def create_optimization_agent() -> Agent:
     """Create and configure the Optimization Agent."""
     
     logger.info("[Optimization] Creating optimization recommendation agent")
     
-    # Define agent instructions
+    # Define tools list
+    tools = [analyze_investment_efficiency, simulate_optimizations, generate_section_explanation]
+    if has_langchain:
+        tools.extend([search_optimization_insights_with_langchain, analyze_performance_trends_with_langchain])
+        logger.info("[Optimization] Added LangChain-enhanced tools")
+    
+    # Update instructions to mention LangChain tools
     instructions = """
     You are a specialized Optimization Recommendation Agent for property investment analysis.
-    
-    Your task is to analyze investment properties and suggest specific optimizations to improve returns:
+    You can leverage LangChain-enhanced web search tools to gather the latest industry insights
+    and analyze performance trends directly from reputable sources.
+
+    Your task is to analyze completed property and financial data and suggest optimizations:
     1. Review complete property and financial data
     2. Identify potentially suboptimal aspects (financing, rent, expenses)
     3. Generate possible optimization strategies
@@ -100,7 +151,6 @@ def create_optimization_agent() -> Agent:
     logger.info("[Optimization] OpenAI client configured for agent")
     
     # Log the available tools
-    tools = [analyze_investment_efficiency, simulate_optimizations, generate_section_explanation]
     tool_names = [tool.__name__ if hasattr(tool, '__name__') else tool.name for tool in tools]
     logger.info(f"[Optimization] Setting up agent with tools: {', '.join(tool_names)}")
     

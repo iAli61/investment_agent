@@ -37,6 +37,8 @@ if "units" not in st.session_state:
     st.session_state.units = []
 if "tab_change_requested" not in st.session_state:
     st.session_state.tab_change_requested = False
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 # Helper functions
 def fetch_market_data(location, property_type):
@@ -284,39 +286,49 @@ st.markdown('<div class="main-header">Property Investment Analysis</div>', unsaf
 st.markdown("Analyze real estate investments with AI-powered insights")
 st.markdown("---")
 
-# Sidebar
+# Sidebar for navigation and chat
 with st.sidebar:
-    st.markdown("## Navigation")
-    tabs = [
-        "Property Input", 
-        "Rental Units", 
-        "Financing", 
-        "Expenses & Tax", 
-        "Analysis Results"
-    ]
-    
-    # Only update the tab if it was changed directly in the sidebar
-    selected_tab = st.radio("Select Section", tabs, index=tabs.index(st.session_state.current_tab))
-    if selected_tab != st.session_state.current_tab and not st.session_state.tab_change_requested:
-        st.session_state.current_tab = selected_tab
-    
-    # Reset the tab change request flag
-    if st.session_state.tab_change_requested:
-        st.session_state.tab_change_requested = False
-    
-    st.markdown("---")
-    st.markdown("## About")
-    st.markdown("""
-    This application helps real estate investors analyze properties by:
-    
-    * Calculating acquisition costs
-    * Estimating rental income with AI
-    * Analyzing financing options
-    * Projecting cash flow and returns
-    * Assessing investment risks
-    
-    Powered by AI agents for real-time market data.
-    """)
+    st.header("Property Investment Analysis")
+
+    # Chat input
+    st.markdown("### AI Chat Assistant")
+    user_message = st.text_input("Ask me anything about property investment:")
+    if user_message:
+        # Send message to backend
+        payload = {"message": user_message, "context": {}}
+        try:
+            response = requests.post(f"{API_URL}/ai/conversation/", json=payload)
+            response.raise_for_status()
+            result = response.json()
+            st.session_state.chat_history.append({"user": user_message, "ai": result["response"]})
+
+            # Display chat history
+            for chat in st.session_state.chat_history:
+                st.markdown(f"**You:** {chat['user']}")
+                st.markdown(f"**AI:** {chat['ai']}")
+
+            # Display suggestions as buttons
+            if result.get("suggestions"):
+                for suggestion in result["suggestions"]:
+                    if st.button(suggestion):
+                        st.write(f"Clicked: {suggestion}")  # Replace with actual logic
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error during conversation: {e}")
+
+    # Navigation buttons
+    st.markdown("### Navigation")
+    if st.button("Property Details"):
+        change_tab("Property Details")
+    if st.button("Rental Units"):
+        change_tab("Rental Units")
+    if st.button("Financing"):
+        change_tab("Financing")
+    if st.button("Expenses"):
+        change_tab("Expenses")
+    if st.button("Tax"):
+        change_tab("Tax")
+    if st.button("Analysis"):
+        change_tab("Analysis")
 
 # Main content
 if st.session_state.current_tab == "Property Input":

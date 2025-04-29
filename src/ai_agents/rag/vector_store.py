@@ -69,48 +69,25 @@ class VectorStore:
         self.text_splitter = None
         
         if HAS_VECTOR_DEPENDENCIES:
+            # Initialize vector store on creation
             self._initialize_vector_store()
-    
+
     def _initialize_vector_store(self):
         """Initialize the vector database with the specified embedding model."""
         try:
-            # Initialize embedding model
+            # Setup embeddings and text splitter
             self.embeddings = HuggingFaceEmbeddings(model_name=self.embedding_model)
-            
-            # Initialize vector store
+            self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+            # Initialize vector DB
             if self.use_faiss:
-                # Use FAISS for high-performance vector search
-                if os.path.exists(f"{self.vector_db_path}/index.faiss"):
-                    self.vector_db = FAISS.load_local(
-                        self.vector_db_path, 
-                        self.embeddings
-                    )
-                    logger.info(f"Loaded existing FAISS vector database from {self.vector_db_path}")
-                else:
-                    self.vector_db = FAISS.from_documents(
-                        [Document(page_content="Investment initialization", metadata={"source": "init"})],
-                        self.embeddings
-                    )
-                    self.vector_db.save_local(self.vector_db_path)
-                    logger.info(f"Created new FAISS vector database at {self.vector_db_path}")
+                self.vector_db = FAISS(self.embeddings, persist_directory=self.vector_db_path)
             else:
-                # Use Chroma for ease of use and visualization
-                self.vector_db = Chroma(
-                    persist_directory=self.vector_db_path,
-                    embedding_function=self.embeddings
-                )
-                logger.info(f"Initialized Chroma vector database at {self.vector_db_path}")
-            
-            self.text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200
-            )
+                self.vector_db = Chroma(embedding_function=self.embeddings, persist_directory=self.vector_db_path)
             self.initialized = True
-            
         except Exception as e:
-            logger.error(f"Error initializing vector store: {str(e)}")
-            self.initialized = False
-    
+            logger.error(f"Failed to initialize vector store: {e}")
+            raise
+
     def add_documents(self, 
                       texts: List[str], 
                       metadatas: Optional[List[Dict[str, Any]]] = None) -> List[str]:
@@ -125,35 +102,26 @@ class VectorStore:
             List of document IDs
         """
         if not self.initialized:
-            logger.error("Vector store not initialized")
-            return []
+            self._initialize_vector_store()
         
-        if not metadatas:
-            metadatas = [{"source": "manual", "timestamp": datetime.now().isoformat()} for _ in texts]
+        if metadatas is None:
+            metadatas = [{} for _ in texts]
         
         try:
-            # Split texts into chunks
+            # Split texts into documents and add
             docs = []
-            for i, text in enumerate(texts):
-                chunks = self.text_splitter.split_text(text)
-                for j, chunk in enumerate(chunks):
-                    chunk_metadata = metadatas[i].copy()
-                    chunk_metadata["chunk_id"] = j
-                    docs.append(Document(page_content=chunk, metadata=chunk_metadata))
-            
-            # Add documents to vector store
-            ids = self.vector_db.add_documents(docs)
-            
-            # Save if using FAISS
-            if self.use_faiss:
-                self.vector_db.save_local(self.vector_db_path)
-                
-            logger.info(f"Added {len(docs)} document chunks to vector store")
-            return ids
+            for text, meta in zip(texts, metadatas):
+                for chunk in self.text_splitter.split_text(text):
+                    docs.append(Document(page_content=chunk, metadata=meta))
+            # Add to DB and persist
+            self.vector_db.add_documents(docs)
+            if hasattr(self.vector_db, 'persist'): self.vector_db.persist()
+            # Return generated ids if available
+            return [d.metadata.get('id', '') for d in docs]
         except Exception as e:
-            logger.error(f"Error adding documents to vector store: {str(e)}")
-            return []
-    
+            logger.error(f"Error adding documents: {e}")
+            raise
+
     def search(self, 
                query: str, 
                k: int = 5, 
@@ -172,37 +140,15 @@ class VectorStore:
             List of search results
         """
         if not self.initialized:
-            logger.error("Vector store not initialized")
-            return []
+            self._initialize_vector_store()
         
-        # Use filter_dict if provided, otherwise use filter_metadata
-        filter_to_use = filter_dict if filter_dict is not None else filter_metadata
-        
+        filter_to_use = filter_dict or filter_metadata
         try:
-            # Search vector store
-            if filter_to_use:
-                docs_and_scores = self.vector_db.similarity_search_with_score(
-                    query, k=k, filter=filter_to_use
-                )
-            else:
-                docs_and_scores = self.vector_db.similarity_search_with_score(
-                    query, k=k
-                )
-            
-            # Convert to SearchResult objects
-            results = []
-            for doc, score in docs_and_scores:
-                results.append(SearchResult(
-                    text=doc.page_content,
-                    metadata=doc.metadata,
-                    score=float(score)
-                ))
-            
-            logger.info(f"Found {len(results)} results for query: {query}")
-            return results
+            results = self.vector_db.similarity_search(query, k=k, filter=filter_to_use)
+            return [SearchResult(text=res.page_content, metadata=res.metadata, score=res.score) for res in results]
         except Exception as e:
-            logger.error(f"Error searching vector store: {str(e)}")
-            return []
+            logger.error(f"Search error: {e}")
+            raise
 
     def delete(self, 
                filter_metadata: Dict[str, Any]) -> bool:
@@ -216,23 +162,17 @@ class VectorStore:
             Success indicator
         """
         if not self.initialized:
-            logger.error("Vector store not initialized")
-            return False
+            self._initialize_vector_store()
         
         try:
-            # Delete from vector store
-            self.vector_db.delete(filter=filter_metadata)
-            
-            # Save if using FAISS
-            if self.use_faiss:
-                self.vector_db.save_local(self.vector_db_path)
-                
-            logger.info(f"Deleted documents matching filter: {filter_metadata}")
+            # Remove by metadata filter
+            self.vector_db.delete(filter_metadata)
+            if hasattr(self.vector_db, 'persist'): self.vector_db.persist()
             return True
         except Exception as e:
-            logger.error(f"Error deleting from vector store: {str(e)}")
+            logger.error(f"Delete error: {e}")
             return False
-    
+
     def save(self) -> bool:
         """
         Save the vector store to disk.
@@ -241,21 +181,18 @@ class VectorStore:
             Success indicator
         """
         if not self.initialized:
-            logger.error("Vector store not initialized")
             return False
         
         try:
-            if self.use_faiss:
-                self.vector_db.save_local(self.vector_db_path)
-                logger.info(f"Saved FAISS vector database to {self.vector_db_path}")
-            else:
-                # For Chroma, persistence is handled automatically
-                pass
-            return True
-        except Exception as e:
-            logger.error(f"Error saving vector store: {str(e)}")
+            # Persist the vector store
+            if hasattr(self.vector_db, 'persist'):
+                self.vector_db.persist()
+                return True
             return False
-    
+        except Exception as e:
+            logger.error(f"Save error: {e}")
+            return False
+
     def get_retriever(self, search_kwargs=None):
         """
         Get a LangChain retriever from this vector store.
@@ -267,17 +204,9 @@ class VectorStore:
             A LangChain retriever
         """
         if not self.initialized:
-            logger.error("Vector store not initialized")
-            return None
-        
-        if search_kwargs is None:
-            search_kwargs = {"k": 4}
-            
-        try:
-            return self.vector_db.as_retriever(search_kwargs=search_kwargs)
-        except Exception as e:
-            logger.error(f"Error creating retriever: {str(e)}")
-            return None
+            self._initialize_vector_store()
+        # Return a LangChain retriever
+        return self.vector_db.as_retriever(search_kwargs=search_kwargs)
 
 # Create singleton instance
 _vector_store = None
@@ -302,9 +231,6 @@ def get_vector_store(
     """
     global _vector_store
     if _vector_store is None:
-        _vector_store = VectorStore(
-            embedding_model=embedding_model,
-            vector_db_path=vector_db_path,
-            use_faiss=use_faiss
-        )
+        # Instantiate singleton
+        _vector_store = VectorStore(embedding_model=embedding_model, vector_db_path=vector_db_path, use_faiss=use_faiss)
     return _vector_store

@@ -37,51 +37,82 @@ class DocumentAnalysisResult(BaseModel):
     key_insights: List[str]
     explanation: str
 
+# Check for LangChain dependencies
+try:
+    from langchain_community.document_loaders import UnstructuredPDFLoader, WebBaseLoader
+    from langchain_core.tools import Tool
+    has_langchain = True
+    logger.info("[Document Analysis] LangChain dependencies loaded")
+except ImportError:
+    has_langchain = False
+    logger.warning("[Document Analysis] LangChain dependencies not available")
+
+if has_langchain:
+    @function_tool
+    def load_document_with_langchain(source: str) -> str:
+        """
+        Load and extract text from a document (PDF or webpage) using LangChain.
+        """
+        logger.info(f"[Document Analysis] Loading document from {source} using LangChain")
+        try:
+            if source.lower().startswith(('http://','https://')):
+                loader = WebBaseLoader(source)
+            else:
+                loader = UnstructuredPDFLoader(source)
+            docs = loader.load()
+            content = "\n".join([d.page_content for d in docs])
+            return content
+        except Exception as e:
+            logger.error(f"[Document Analysis] LangChain load error: {e}")
+            return ""
+
+    @function_tool
+    def summarize_document_with_langchain(text: str, max_length: int = 200) -> str:
+        """
+        Summarize a document's text using the default OpenAI summarization model.
+        """
+        logger.info("[Document Analysis] Summarizing document using LangChain")
+        try:
+            from agents import OpenAIChatCompletionsModel, Agent
+            # Use a lightweight summarization prompt
+            summary_prompt = f"Summarize the following document in up to {max_length} characters:\n{text}"  
+            agent = Agent(
+                name="DocSummaryAgent",
+                instructions="You are a concise summarizer.",
+                model=OpenAIChatCompletionsModel(model="gpt-3.5-turbo"),
+                tools=[]
+            )
+            result = agent.run(summary_prompt)
+            return result
+        except Exception as e:
+            logger.error(f"[Document Analysis] Summarization error: {e}")
+            return text[:max_length]
+
 def create_document_analysis_agent() -> Agent:
     """Create and configure the Document Analysis Agent."""
     
     logger.info("[Document Analysis] Creating document analysis agent")
     
-    # Define agent instructions
+    # Define tools list
+    tools = [extract_document_text, classify_document_type, parse_property_text, generate_section_explanation]
+    if has_langchain:
+        tools = [load_document_with_langchain, summarize_document_with_langchain] + tools
+        logger.info("[Document Analysis] Added LangChain document loader and summarizer tools")
+
+    # Update instructions to reference new tools
     instructions = """
     You are a specialized Document Analysis Agent for property investment analysis.
-    
-    Your task is to extract, structure, and analyze information from property-related documents:
-    1. Property listings
-    2. Sales contracts
-    3. Lease agreements
-    4. Inspection reports
-    5. Property management reports
-    6. Financial documents
-    
-    Follow these steps when processing documents:
-    1. Identify document type
-    2. Extract key data points (dates, names, amounts, property details)
-    3. Identify standard sections relevant to investment analysis
-    4. Flag any unusual terms, conditions, or restrictions
-    5. Structure information for further analysis
-    
-    Always include confidence scores for extracted data points and highlight any areas 
-    of ambiguity or uncertainty.
-    
-    For property listings and inspection reports, extract:
-    - Property details (size, rooms, features, conditions)
-    - Noted issues or required repairs
-    - Estimated costs of repairs
-    
-    For lease agreements, extract:
-    - Rent amounts
-    - Security deposits
-    - Term duration
-    - Renewal conditions
-    - Tenant responsibilities
-    - Special clauses
-    
-    For financial documents, extract:
-    - Income figures
-    - Expense categories
-    - Profit calculations
-    - Tax implications
+
+    You can load and analyze property-related documents (PDFs, webpages, reports) using LangChain document loaders.
+
+    Your tasks:
+    1. Load documents from URLs or file paths (PDF, HTML)
+    2. Extract and structure key data points (dates, amounts, property details)
+    3. Summarize large documents into concise overviews
+    4. Identify and highlight unusual clauses or risks
+    5. Provide confidence scores for extracted information
+
+    Always cite sections when summarizing and flag any ambiguities.
     """
     
     from openai import AsyncAzureOpenAI
@@ -106,7 +137,6 @@ def create_document_analysis_agent() -> Agent:
     logger.info("[Document Analysis] OpenAI client configured for agent")
 
     # Log the available tools
-    tools = [extract_document_text, classify_document_type, parse_property_text, generate_section_explanation]
     tool_names = [tool.__name__ if hasattr(tool, '__name__') else tool.name for tool in tools]
     logger.info(f"[Document Analysis] Setting up agent with tools: {', '.join(tool_names)}")
 

@@ -4,7 +4,7 @@ Main backend API for the Property Investment Analysis App
 import os
 import logging
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uuid
@@ -461,3 +461,40 @@ async def estimate_rent(request: RentEstimationRequest, background_tasks: Backgr
     background_tasks.add_task(orchestrator.process_queue)
     
     return {"task_id": task_id, "status": "processing"}
+
+class ConversationRequest(BaseModel):
+    message: str
+    context: Optional[Dict[str, Any]] = None
+
+class ConversationResponse(BaseModel):
+    response: str
+    suggestions: Optional[List[str]] = []
+    context: Optional[Dict[str, Any]] = None
+
+@app.post("/ai/conversation/", response_model=ConversationResponse)
+async def converse(request: ConversationRequest):
+    """
+    Conversational Guidance endpoint: routes user message to Manager Agent,
+    maintains context, and returns AI response with suggestions.
+    """
+    # Use the manager agent from orchestrator
+    manager_agent = getattr(orchestrator, "manager_agent", None)
+    if not manager_agent:
+        raise HTTPException(status_code=500, detail="Manager agent not available")
+
+    # Prepare conversation context
+    context = request.context or {}
+    user_message = request.message
+
+    # Call the manager agent's conversation method (assume async)
+    try:
+        result = await manager_agent.converse(user_message, context)
+        # result: {"response": str, "suggestions": [str], "context": {...}}
+        return ConversationResponse(
+            response=result.get("response", ""),
+            suggestions=result.get("suggestions", []),
+            context=result.get("context", context)
+        )
+    except Exception as e:
+        logger.error(f"Error in conversational guidance: {e}")
+        raise HTTPException(status_code=500, detail="AI conversation failed")

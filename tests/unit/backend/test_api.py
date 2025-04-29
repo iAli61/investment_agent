@@ -12,6 +12,7 @@ from src.backend.api import create_financing, get_financing
 from src.backend.api import get_market_data, get_task_result, estimate_rent
 from src.backend.api import PropertyCreate, RentalUnitCreate, FinancingCreate
 from src.backend.api import MarketDataRequest, RentEstimationRequest
+from src.backend.api import converse, ConversationRequest, ConversationResponse
 
 
 # Simple test database setup for direct function testing
@@ -246,6 +247,30 @@ class MockedAITests(AsyncTestCase):
         
         # Verify we call the orchestrator
         mock_orchestrator.get_result.assert_called_once()
+
+
+class MockManagerAgent:
+    async def converse(self, message, context):
+        # Simulate a simple AI response
+        return {
+            "response": f"Echo: {message}",
+            "suggestions": ["Next step suggestion"],
+            "context": context or {"step": 1}
+        }
+
+class ConversationEndpointTests(AsyncTestCase):
+    @patch("src.backend.api.orchestrator")
+    def test_conversation_endpoint(self, mock_orchestrator):
+        # Patch the manager_agent on orchestrator
+        mock_orchestrator.manager_agent = MockManagerAgent()
+        # Prepare request
+        req = ConversationRequest(message="How do I start?", context={"step": 0})
+        # Run the endpoint
+        result = self.run_async(converse(req))
+        self.assertIsInstance(result, ConversationResponse)
+        self.assertIn("Echo", result.response)
+        self.assertTrue(result.suggestions)
+        self.assertEqual(result.context.get("step"), 0)
 
 
 if __name__ == "__main__":

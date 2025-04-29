@@ -9,6 +9,7 @@ import sys
 import asyncio
 import logging
 from dotenv import load_dotenv
+import logfire
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -54,8 +55,14 @@ async def setup_azure_openai_client():
         )
         
         # Disable tracing completely for the Agents SDK
-        set_tracing_disabled(True)
-        logger.info("OpenAI Dashboard tracing has been disabled")
+
+        if os.getenv("OPENAI_AGENTS_DISABLE_TRACING", "0") == "1":
+            set_tracing_disabled(True)
+            logger.info("Tracing has been disabled for the Agents SDK")
+        else:
+            # todo: enable tracing if needed
+            assert False, "Tracing is not yet implemented for the Agents SDK"
+        
         
         # Set as default client for Agents SDK
         set_default_openai_client(openai_client)

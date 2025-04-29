@@ -1,0 +1,41 @@
+2025-04-28 18:09:52,626 [INFO] - ================================================================================
+2025-04-28 18:09:52,626 [INFO] - RUNNING ALL RISK ANALYSIS TESTS - 2025-04-28 18:09:52
+2025-04-28 18:09:52,626 [INFO] - ================================================================================
+2025-04-28 18:09:52,626 [INFO] - ================================================================================
+2025-04-28 18:09:52,626 [INFO] - MARKET RISK ANALYSIS TEST - 2025-04-28 18:09:52
+2025-04-28 18:09:52,626 [INFO] - ================================================================================
+2025-04-28 18:09:52,627 [INFO] - Testing market risk analysis for residential property in Berlin
+2025-04-28 18:09:52,627 [INFO] - Historical data spans 5 periods
+2025-04-28 18:09:52,627 [INFO] - [Risk Analysis] Analyzing market-related risks
+2025-04-28 18:09:52,627 [INFO] - Market risk analysis completed successfully
+2025-04-28 18:09:52,627 [INFO] - ================================================================================
+2025-04-28 18:09:52,627 [INFO] - PROPERTY-SPECIFIC RISK ANALYSIS TEST - 2025-04-28 18:09:52
+2025-04-28 18:09:52,627 [INFO] - ================================================================================
+2025-04-28 18:09:52,627 [INFO] - Testing property-specific risk analysis for apartment
+2025-04-28 18:09:52,627 [INFO] - Property age: 25 years, Condition: 7/10
+2025-04-28 18:09:52,627 [INFO] - [Risk Analysis] Analyzing property-specific risks
+2025-04-28 18:09:52,627 [INFO] - Property-specific risk analysis completed successfully
+2025-04-28 18:09:52,627 [INFO] - ================================================================================
+2025-04-28 18:09:52,627 [INFO] - FINANCIAL RISK ANALYSIS TEST - 2025-04-28 18:09:52
+2025-04-28 18:09:52,627 [INFO] - ================================================================================
+2025-04-28 18:09:52,628 [INFO] - Testing financial risk analysis
+2025-04-28 18:09:52,628 [INFO] - LTV: 70%, Monthly cash flow: €1200
+2025-04-28 18:09:52,628 [INFO] - [Risk Analysis] Analyzing financial risks
+2025-04-28 18:09:52,628 [INFO] - Financial risk analysis completed successfully
+2025-04-28 18:09:52,628 [INFO] - ================================================================================
+2025-04-28 18:09:52,628 [INFO] - CONSOLIDATED RISK SCORE TEST - 2025-04-28 18:09:52
+2025-04-28 18:09:52,628 [INFO] - ================================================================================
+2025-04-28 18:09:52,628 [INFO] - Testing consolidated risk score calculation
+2025-04-28 18:09:52,628 [INFO] - Market risk: 45 (Medium)
+2025-04-28 18:09:52,628 [INFO] - Property risk: 35 (Medium)
+2025-04-28 18:09:52,628 [INFO] - Financial risk: 68 (High)
+2025-04-28 18:09:52,628 [INFO] - [Risk Analysis] Calculating consolidated risk score
+2025-04-28 18:09:52,628 [INFO] - Consolidated risk score calculation completed successfully
+2025-04-28 18:09:52,628 [INFO] - ================================================================================
+2025-04-28 18:09:52,628 [INFO] - RISK MITIGATION STRATEGIES TEST - 2025-04-28 18:09:52
+2025-04-28 18:09:52,628 [INFO] - ================================================================================
+2025-04-28 18:09:52,629 [INFO] - Testing risk mitigation strategies generation
+2025-04-28 18:09:52,629 [INFO] - Input: 5 risk factors with overall score of 65
+2025-04-28 18:09:52,629 [INFO] - [Risk Analysis] Generating risk mitigation strategies
+2025-04-28 18:09:52,629 [INFO] - Mitigation strategies generation completed successfully
+2025-04-28 18:09:52,629 [INFO] - All risk analysis tests completed

@@ -72,8 +72,19 @@ def test_investment_scenario():
     else:
         logger.info("Rent estimation completed successfully!")
     
-    # Stage 4: Investment Optimization
-    logger.info("\n[STAGE 4] INVESTMENT OPTIMIZATION")
+    # Stage 4: Risk Analysis
+    logger.info("\n[STAGE 4] RISK ANALYSIS")
+    risk_result = run_risk_analysis(property_location, property_type, property_size, purchase_price, 
+                                     market_data_result, rent_result)
+    
+    if not risk_result:
+        logger.error("Risk analysis failed. Continuing with mock data.")
+        risk_result = create_mock_risk_data(property_location, property_type)
+    else:
+        logger.info("Risk analysis completed successfully!")
+    
+    # Stage 5: Investment Optimization
+    logger.info("\n[STAGE 5] INVESTMENT OPTIMIZATION")
     optimization_result = run_optimization_analysis(
         property_location, 
         property_type,
@@ -102,6 +113,7 @@ def test_investment_scenario():
         market_data_result,
         document_result,
         rent_result,
+        risk_result,
         optimization_result
     )
 
@@ -541,7 +553,7 @@ def create_mock_optimization_data(location, property_type, size_sqm, purchase_pr
     }
 
 def print_investment_summary(location, property_type, size_sqm, purchase_price, 
-                            market_data, document_data, rent_data, optimization_data):
+                            market_data, document_data, rent_data, risk_data, optimization_data):
     """Print a comprehensive summary of the investment analysis"""
     print(f"\n{'='*80}")
     print(f"INVESTMENT ANALYSIS SUMMARY")
@@ -576,6 +588,30 @@ def print_investment_summary(location, property_type, size_sqm, purchase_price,
         for insight in document_data.get("key_insights", []):
             print(f"  • {insight}")
     
+    if risk_data:
+        print(f"\n⚠️ RISK ANALYSIS:")
+        consolidated = risk_data.get("consolidated_risk", {})
+        print(f"  Overall Risk: {consolidated.get('risk_level', 'N/A')} ({consolidated.get('risk_score', 'N/A')})")
+        
+        print(f"\n  Key Risk Factors:")
+        # Display top risks from each category
+        for risk_type in ["market_risks", "property_risks", "financial_risks"]:
+            if risk_type in risk_data and "risk_factors" in risk_data[risk_type]:
+                factors = risk_data[risk_type]["risk_factors"]
+                if factors:
+                    # Get the highest severity risk
+                    highest_risk = max(factors, key=lambda x: x.get("severity", 0))
+                    risk_name = highest_risk.get("risk", "unknown").replace("_", " ").title()
+                    print(f"  • {risk_name}: Severity {highest_risk.get('severity', 'N/A')}")
+        
+        print(f"\n  Mitigation Strategies:")
+        if "mitigation_strategies" in risk_data and "mitigation_strategies" in risk_data["mitigation_strategies"]:
+            # Display top 3 mitigation strategies
+            strategies = risk_data["mitigation_strategies"]["mitigation_strategies"][:3]
+            for strategy in strategies:
+                risk_name = strategy.get("risk", "unknown").replace("_", " ").title()
+                print(f"  • For {risk_name}: {strategy.get('strategy', 'N/A')}")
+    
     if optimization_data:
         print(f"\n⚡ OPTIMIZATION OPPORTUNITIES:")
         for action in optimization_data.get("prioritized_actions", []):
@@ -596,7 +632,200 @@ def print_investment_summary(location, property_type, size_sqm, purchase_price,
     logger.info(f"Property: {size_sqm}sqm {property_type} in {location}")
     logger.info(f"Purchase Price: €{purchase_price}")
     logger.info(f"Estimated Rent: €{rent_data.get('estimated_rent', 'N/A')}")
-    logger.info(f"Potential Monthly Cash Flow Improvement: {impact.get('total_monthly_cash_flow_improvement', 'N/A')}")
+    if risk_data and "consolidated_risk" in risk_data:
+        logger.info(f"Risk Level: {risk_data['consolidated_risk'].get('risk_level', 'N/A')}")
+    if impact:
+        logger.info(f"Potential Monthly Cash Flow Improvement: {impact.get('total_monthly_cash_flow_improvement', 'N/A')}")
+
+def run_risk_analysis(location, property_type, property_size, purchase_price, market_data, rent_data):
+    """Run risk analysis on the specified property investment"""
+    logger.info(f"Starting risk analysis for {property_type} in {location}")
+    
+    try:
+        # Import risk analysis functions
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+        from ai_agents.specialized.risk_analysis_agent import (
+            analyze_market_risks,
+            analyze_property_specific_risks,
+            analyze_financial_risks,
+            generate_risk_mitigation_strategies,
+            calculate_consolidated_risk_score
+        )
+        
+        # Step 1: Prepare historical data for market risk analysis
+        historical_data = {
+            "prices": market_data.get("historical_data", {}).get("prices", [market_data.get("price_data", {}).get("average_price_sqm", "4500")]),
+            "vacancy_rates": [market_data.get("rental_data", {}).get("vacancy_rate", 3.0)],
+            "interest_rates": [3.0, 3.2, 3.5]  # Sample interest rates
+        }
+        
+        # If we only have one data point, create a synthetic historical series
+        if len(historical_data["prices"]) == 1:
+            try:
+                base_price = float(str(historical_data["prices"][0]).replace(",", ""))
+                historical_data["prices"] = [
+                    base_price * 0.9,
+                    base_price * 0.95,
+                    base_price,
+                    base_price * 1.02
+                ]
+            except (ValueError, TypeError):
+                # If conversion fails, use default series
+                historical_data["prices"] = [350000, 365000, 380000, 400000]
+        
+        logger.info(f"Prepared historical data for market risk analysis")
+        
+        # Step 2: Prepare property-specific data
+        property_data = {
+            "property_type": property_type,
+            "size_sqm": property_size,
+            "age_years": 15,  # Assumed age
+            "condition_rating": 7,  # Scale of 1-10
+            "location_score": 8,  # Scale of 1-10
+            "features": ["balcony", "elevator"] if property_size > 70 else ["balcony"]
+        }
+        
+        # Step 3: Prepare financial data
+        monthly_rent = rent_data.get("estimated_rent", property_size * 20)  # Estimate if not available
+        financial_data = {
+            "purchase_price": purchase_price,
+            "monthly_income": monthly_rent,
+            "monthly_expenses": monthly_rent * 0.3,  # Estimated expenses at 30% of rent
+            "loan_to_value": 70,  # Assumed 70% LTV
+            "interest_rate": 3.5,
+            "loan_term_years": 25,
+            "cash_reserves": purchase_price * 0.05  # 5% of purchase price as reserves
+        }
+        
+        # Step 4: Prepare investment goals
+        investment_goals = {
+            "investment_horizon": "long-term",
+            "primary_goal": "cash_flow",
+            "risk_tolerance": "moderate",
+            "target_yield": 4.5,
+            "cash_flow_requirements": monthly_rent * 0.3
+        }
+        
+        logger.info(f"Prepared all data for risk analysis")
+        
+        # Step 5: Run market risk analysis
+        start_time = time.time()
+        logger.info(f"Running market risk analysis...")
+        market_risks_json = analyze_market_risks(
+            location,
+            property_type,
+            json.dumps(historical_data)
+        )
+        market_risks = json.loads(market_risks_json)
+        logger.info(f"Market risk analysis complete: {market_risks.get('risk_level')} risk level")
+        
+        # Step 6: Run property-specific risk analysis
+        logger.info(f"Running property-specific risk analysis...")
+        property_risks_json = analyze_property_specific_risks(
+            json.dumps(property_data)
+        )
+        property_risks = json.loads(property_risks_json)
+        logger.info(f"Property risk analysis complete: {property_risks.get('risk_level')} risk level")
+        
+        # Step 7: Run financial risk analysis
+        logger.info(f"Running financial risk analysis...")
+        financial_risks_json = analyze_financial_risks(
+            json.dumps(financial_data),
+            json.dumps(investment_goals)
+        )
+        financial_risks = json.loads(financial_risks_json)
+        logger.info(f"Financial risk analysis complete: {financial_risks.get('risk_level')} risk level")
+        
+        # Step 8: Calculate consolidated risk score
+        logger.info(f"Calculating consolidated risk score...")
+        consolidated_risk_json = calculate_consolidated_risk_score(
+            market_risks_json,
+            property_risks_json,
+            financial_risks_json
+        )
+        consolidated_risk = json.loads(consolidated_risk_json)
+        logger.info(f"Consolidated risk: {consolidated_risk.get('risk_score')} ({consolidated_risk.get('risk_level')})")
+        
+        # Step 9: Generate risk mitigation strategies
+        logger.info(f"Generating risk mitigation strategies...")
+        # Combine risk factors from all analyses
+        all_risk_factors = {
+            "risk_score": consolidated_risk.get("risk_score"),
+            "risk_level": consolidated_risk.get("risk_level"),
+            "risk_factors": (
+                market_risks.get("risk_factors", []) +
+                property_risks.get("risk_factors", []) +
+                financial_risks.get("risk_factors", [])
+            )
+        }
+        
+        mitigation_json = generate_risk_mitigation_strategies(json.dumps(all_risk_factors))
+        mitigation_strategies = json.loads(mitigation_json)
+        logger.info(f"Generated {len(mitigation_strategies.get('mitigation_strategies', []))} mitigation strategies")
+        
+        # Prepare the final result
+        execution_time = time.time() - start_time
+        logger.info(f"Complete risk analysis finished in {execution_time:.2f} seconds")
+        
+        result = {
+            "market_risks": market_risks,
+            "property_risks": property_risks,
+            "financial_risks": financial_risks,
+            "consolidated_risk": consolidated_risk,
+            "mitigation_strategies": mitigation_strategies,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return result
+    
+    except Exception as e:
+        logger.error(f"Error during risk analysis: {str(e)}", exc_info=True)
+        print(f"Error: {str(e)}")
+        return None
+
+def create_mock_risk_data(location, property_type):
+    """Create mock risk analysis data for testing when the real analysis fails"""
+    logger.info(f"Creating mock risk data for {property_type} in {location}")
+    
+    return {
+        "consolidated_risk": {
+            "risk_score": 45.5,
+            "risk_level": "Medium",
+            "analysis_confidence": 0.8
+        },
+        "market_risks": {
+            "risk_score": 52.3,
+            "risk_level": "Medium",
+            "risk_factors": [
+                {"risk": "price_volatility", "severity": 0.6, "probability": 0.5},
+                {"risk": "vacancy_risk", "severity": 0.4, "probability": 0.5}
+            ]
+        },
+        "property_risks": {
+            "risk_score": 35.8,
+            "risk_level": "Medium",
+            "risk_factors": [
+                {"risk": "age_risk", "severity": 0.3, "probability": 0.5},
+                {"risk": "condition_risk", "severity": 0.4, "probability": 0.5}
+            ]
+        },
+        "financial_risks": {
+            "risk_score": 48.4,
+            "risk_level": "Medium",
+            "risk_factors": [
+                {"risk": "cash_flow_risk", "severity": 0.5, "probability": 0.5},
+                {"risk": "leverage_risk", "severity": 0.6, "probability": 0.5}
+            ]
+        },
+        "mitigation_strategies": {
+            "mitigation_strategies": [
+                {"risk": "price_volatility", "strategy": "Diversify investment locations and lock in long-term rates."},
+                {"risk": "vacancy_risk", "strategy": "Maintain contingency reserves and pre-market units."},
+                {"risk": "cash_flow_risk", "strategy": "Optimize rental rates and control expenses."}
+            ],
+            "analysis_confidence": 0.9
+        }
+    }
 
 if __name__ == "__main__":
     try:

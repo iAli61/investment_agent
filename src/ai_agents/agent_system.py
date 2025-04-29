@@ -82,7 +82,7 @@ class AIAgentSystem:
         self.orchestrator = None
         self.manager_agent = None
         self.specialized_agents = {}
-        self.guardrails = create_guardrails()
+        self.guardrails = []  # Initialize as empty list first, will be populated in initialize()
         
         if self.use_azure:
             self._configure_azure_openai()

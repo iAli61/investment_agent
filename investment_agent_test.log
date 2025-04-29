@@ -1,0 +1,80 @@
+2025-04-28 17:56:10,145 [INFO] - ================================================================================
+2025-04-28 17:56:10,145 [INFO] - INVESTMENT AGENT SYSTEM TEST - 2025-04-28 17:56:10
+2025-04-28 17:56:10,145 [INFO] - ================================================================================
+2025-04-28 17:56:10,145 [INFO] - Test scenario: Analyzing 75.0sqm apartment in berlin
+2025-04-28 17:56:10,145 [INFO] - Purchase price: €350000
+2025-04-28 17:56:10,145 [INFO] - 
+[STAGE 1] MARKET DATA ANALYSIS
+2025-04-28 17:56:10,145 [INFO] - Starting market data analysis for apartment in berlin
+2025-04-28 17:56:10,145 [INFO] - Market data request payload: {"location": "berlin", "property_type": "apartment", "additional_filters": {"min_price": 100000, "max_price": 500000, "min_size": 50, "features": ["balcony", "elevator"]}}
+2025-04-28 17:56:10,153 [ERROR] - Error making market data request: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /ai/market-data/ (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f11f7cba810>: Failed to establish a new connection: [Errno 111] Connection refused'))
+2025-04-28 17:56:10,153 [ERROR] - Market data analysis failed or timed out. Continuing with mock data.
+2025-04-28 17:56:10,153 [INFO] - Creating mock market data for apartment in berlin
+2025-04-28 17:56:10,153 [INFO] - 
+[STAGE 2] DOCUMENT ANALYSIS
+2025-04-28 17:56:10,153 [INFO] - Starting document analysis for sample lease agreement
+2025-04-28 17:56:10,153 [INFO] - Document analysis request prepared
+2025-04-28 17:56:12,153 [INFO] - Document analysis completed in 2.00 seconds
+2025-04-28 17:56:12,153 [INFO] - Extracted 8 data points from document
+2025-04-28 17:56:12,153 [INFO] - Identified 4 key insights from lease agreement
+2025-04-28 17:56:12,154 [INFO] - Document analysis completed successfully!
+2025-04-28 17:56:12,154 [INFO] - 
+[STAGE 3] RENT ESTIMATION
+2025-04-28 17:56:12,154 [INFO] - Starting rent estimation for 75.0sqm apartment in berlin
+2025-04-28 17:56:12,154 [INFO] - Rent estimation request prepared with 4 property features
+2025-04-28 17:56:14,154 [INFO] - Rent estimation completed in 2.00 seconds
+2025-04-28 17:56:14,154 [INFO] - Estimated rent: €1800 (€24.0/sqm)
+2025-04-28 17:56:14,154 [INFO] - Rent range: €1620 - €1980
+2025-04-28 17:56:14,154 [INFO] - Property subject to rent control regulations in berlin
+2025-04-28 17:56:14,154 [INFO] - Rent estimation completed successfully!
+2025-04-28 17:56:14,154 [INFO] - 
+[STAGE 4] RISK ANALYSIS
+2025-04-28 17:56:14,154 [INFO] - Starting risk analysis for apartment in berlin
+2025-04-28 17:56:41,224 [INFO] - Use pytorch device_name: cuda:0
+2025-04-28 17:56:41,224 [INFO] - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-04-28 17:56:46,244 [INFO] - Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+2025-04-28 17:56:46,830 [INFO] - [Orchestrator] Initialized vector store at ./vector_db
+2025-04-28 17:56:46,834 [INFO] - Loaded 0 memories from ./agent_memory.json
+2025-04-28 17:56:46,834 [INFO] - [Orchestrator] Initialized agent memory at ./agent_memory.json
+2025-04-28 17:56:46,834 [INFO] - [Orchestrator] Initialized new Agent Orchestrator instance
+2025-04-28 17:56:46,834 [INFO] - [Orchestrator] RAG enabled: True
+2025-04-28 17:56:46,834 [INFO] - [Orchestrator] Memory enabled: True
+2025-04-28 17:56:47,355 [WARNING] - USER_AGENT environment variable not set, consider setting it to identify your requests.
+2025-04-28 17:56:47,373 [INFO] - [Market Data] LangChain dependencies successfully loaded
+2025-04-28 17:56:47,380 [INFO] - [Rent Estimation] LangChain dependencies loaded
+2025-04-28 17:56:47,410 [INFO] - [Document Analysis] LangChain dependencies loaded
+2025-04-28 17:56:47,415 [INFO] - [Optimization] LangChain dependencies loaded
+2025-04-28 17:56:47,423 [INFO] - Added guardrails support to Agent class
+2025-04-28 17:56:47,480 [INFO] - Prepared historical data for market risk analysis
+2025-04-28 17:56:47,480 [INFO] - Prepared all data for risk analysis
+2025-04-28 17:56:47,480 [INFO] - Running market risk analysis...
+2025-04-28 17:56:47,480 [ERROR] - Error during risk analysis: 'FunctionTool' object is not callable
+Traceback (most recent call last):
+  File "/home/azureuser/investment_agent/test_scripts/test_investment_scenario.py", line 714, in run_risk_analysis
+    market_risks_json = analyze_market_risks(
+                        ^^^^^^^^^^^^^^^^^^^^^
+TypeError: 'FunctionTool' object is not callable
+2025-04-28 17:56:47,481 [ERROR] - Risk analysis failed. Continuing with mock data.
+2025-04-28 17:56:47,481 [INFO] - Creating mock risk data for apartment in berlin
+2025-04-28 17:56:47,481 [INFO] - 
+[STAGE 5] INVESTMENT OPTIMIZATION
+2025-04-28 17:56:47,481 [INFO] - Starting optimization analysis for apartment investment in berlin
+2025-04-28 17:56:47,481 [INFO] - Investment financial data prepared:
+2025-04-28 17:56:47,481 [INFO] -   - Purchase price: €350000
+2025-04-28 17:56:47,481 [INFO] -   - Monthly rent: €1800
+2025-04-28 17:56:47,481 [INFO] -   - Gross yield: 6.17%
+2025-04-28 17:56:47,481 [INFO] -   - Monthly cash flow: €-90
+2025-04-28 17:56:49,481 [INFO] - Optimization analysis completed in 2.00 seconds
+2025-04-28 17:56:49,481 [INFO] - Generated 3 optimization recommendations
+2025-04-28 17:56:49,481 [INFO] - Total potential monthly cash flow improvement: +€192
+2025-04-28 17:56:49,481 [INFO] - Total potential ROI improvement: +2.56%
+2025-04-28 17:56:49,481 [INFO] - Optimization analysis completed successfully!
+2025-04-28 17:56:49,481 [INFO] - 
+[SUMMARY] INVESTMENT ANALYSIS COMPLETE
+2025-04-28 17:56:49,481 [INFO] - ================================================================================
+2025-04-28 17:56:49,482 [INFO] - Investment analysis summary generated
+2025-04-28 17:56:49,482 [INFO] - Property: 75.0sqm apartment in berlin
+2025-04-28 17:56:49,482 [INFO] - Purchase Price: €350000
+2025-04-28 17:56:49,482 [INFO] - Estimated Rent: €1800
+2025-04-28 17:56:49,482 [INFO] - Risk Level: Medium
+2025-04-28 17:56:49,482 [INFO] - Potential Monthly Cash Flow Improvement: +€192

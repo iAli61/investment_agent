@@ -26,12 +26,6 @@ class ManagerAgentResult(BaseModel):
 def create_manager_agent(specialized_agents: Dict[str, Agent], model: str = "gpt-4o") -> Agent:
     """
     Create and configure the Manager Agent that coordinates specialized agents.
-    
-    Args:
-        specialized_agents: Dictionary of specialized agents to be used as tools
-        
-    Returns:
-        Configured Manager Agent
     """
     
     # Convert specialized agents to tools
@@ -57,6 +51,8 @@ def create_manager_agent(specialized_agents: Dict[str, Agent], model: str = "gpt
     2. Rent Estimation Agent - Estimates rental income based on property characteristics
     3. Document Analysis Agent - Extracts information from property documents
     4. Optimization Agent - Suggests ways to optimize investment returns
+    5. Risk Analysis Agent - Identifies and quantifies investment risks, and provides mitigation strategies
+    6. Strategy Agent - Develops comprehensive investment strategies and implementation plans
     
     When processing user requests:
     1. Identify the user's intent and required information
@@ -71,8 +67,6 @@ def create_manager_agent(specialized_agents: Dict[str, Agent], model: str = "gpt
     3. Combine their outputs into a comprehensive analysis
     
     Always maintain a helpful, professional tone and provide clear explanations.
-    If a specialized agent fails or returns low-confidence results, acknowledge
-    limitations and suggest alternative approaches.
     """
     
     from openai import AsyncAzureOpenAI
@@ -110,6 +104,8 @@ def _get_agent_description(agent_type: str) -> str:
         "market_data": "gather current market data for a specific location including prices, rents, and trends",
         "rent_estimation": "estimate potential rental income based on property specifics and local market data",
         "document_analysis": "extract key information from property documents like leases and inspection reports",
-        "optimization": "analyze an investment and suggest specific optimizations to improve returns"
+        "optimization": "analyze an investment and suggest specific optimizations to improve returns",
+        "risk_analysis": "analyze investment risks and recommend mitigation strategies",
+        "strategy": "develop tailored investment strategies and implementation plans"
     }
     return descriptions.get(agent_type, "perform a specialized task")

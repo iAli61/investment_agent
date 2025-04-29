@@ -100,7 +100,9 @@ class AgentOrchestrator:
         """Register the manager agent that will coordinate specialized agents."""
         self.manager_agent = agent
         logger.info(f"[Orchestrator] Registered manager agent: {agent.name}")
-        logger.info(f"[Orchestrator] Manager agent has {len(agent.tools or [])} tools available")
+        # Attach conversation interface to manager agent
+        agent.converse = self._manager_converse
+        logger.info("[Orchestrator] Attached converse() method to manager agent")
         
     def register_specialized_agent(self, agent_type: str, agent: Agent):
         """Register a specialized agent with the orchestrator."""
@@ -501,3 +503,27 @@ class AgentOrchestrator:
             error_msg = f"Error executing with manager agent: {str(e)}"
             logger.error(f"[Orchestrator] {error_msg}")
             raise
+
+    async def _manager_converse(self, user_message: str, context: Dict[str, Any]):
+        """Manager Agent conversational interface for chat endpoint."""
+        # Delegate to manager agent execution
+        response_text = await self.execute_with_manager(user_message, context=context)
+        
+        # Generate next-step suggestions
+        suggestions = self._generate_suggestions(user_message, response_text, context)
+
+        # Prepare structured output
+        return {"response": response_text, "suggestions": suggestions, "context": context}
+
+    def _generate_suggestions(self, user_message: str, response_text: str, context: Dict[str, Any]) -> List[str]:
+        """Simple rule-based next-step suggestions based on conversation context."""
+        suggestions: List[str] = []
+        # Initial suggestions when conversation starts
+        if not context or not context.get("conversation_history"):
+            suggestions.append("Enter property details")
+        # If user mentioned lease or document, suggest upload
+        elif "lease" in user_message.lower() or "document" in user_message.lower():
+            suggestions.append("Upload property document for analysis")
+        else:
+            suggestions.append("Continue with investment analysis")
+        return suggestions

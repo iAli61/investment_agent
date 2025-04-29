@@ -9,6 +9,7 @@ import json
 import requests
 from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field
+
 from agents import function_tool
 
 # Configure logging
@@ -64,6 +65,96 @@ class ToolContext(BaseModel):
     model_config = {
         "extra": "forbid"
     }
+
+# Calculation output models
+class ComparablesAnalysis(BaseModel):
+    key_factors: List[str]
+    price_factors: Dict[str, str]
+    rent_factors: Dict[str, str]
+    model_config = {"extra": "forbid"}
+
+class Aspect(BaseModel):
+    aspect: str
+    current: str
+    potential_improvement: str
+
+class EfficiencyAnalysis(BaseModel):
+    suboptimal_aspects: List[Aspect]
+    model_config = {"extra": "forbid"}
+
+class SimulationImpact(BaseModel):
+    monthly_cash_flow: str
+    cash_on_cash_roi: str
+    implementation_cost: str
+    payback_period: str
+
+class Simulation(BaseModel):
+    change: str
+    impact: SimulationImpact
+
+class SimulationResults(BaseModel):
+    simulations: List[Simulation]
+    model_config = {"extra": "forbid"}
+
+# Output validation model
+class OutputValidationResult(BaseModel):
+    tool_name: str
+    valid: bool
+    errors: Optional[List[str]] = None
+    model_config = {"extra": "forbid"}
+
+# Map tool names to Pydantic models for validation
+MODEL_REGISTRY: Dict[str, Any] = {
+    "analyze_comparables": ComparablesAnalysis,
+    "analyze_investment_efficiency": EfficiencyAnalysis,
+    "simulate_optimizations": SimulationResults
+}
+
+@function_tool
+def validate_tool_output(tool_name: str, output_json: str) -> str:
+    """
+    Validate a tool's JSON output against its Pydantic model.
+
+    Args:
+        tool_name: Name of the tool to validate (must be registered)
+        output_json: JSON string output from the tool
+
+    Returns:
+        JSON string with validation result
+    """
+    try:
+        data = json.loads(output_json)
+        model = MODEL_REGISTRY.get(tool_name)
+        if model is None:
+            result = OutputValidationResult(
+                tool_name=tool_name,
+                valid=False,
+                errors=[f"No model registered for tool '{tool_name}'"]
+            )
+        else:
+            try:
+                model(**data)
+                result = OutputValidationResult(
+                    tool_name=tool_name,
+                    valid=True,
+                    errors=[]
+                )
+            except Exception as ve:
+                # Collect validation errors
+                err_msg = str(ve)
+                result = OutputValidationResult(
+                    tool_name=tool_name,
+                    valid=False,
+                    errors=[err_msg]
+                )
+        return result.json()
+    except json.JSONDecodeError as je:
+        result = OutputValidationResult(
+            tool_name=tool_name,
+            valid=False,
+            errors=[f"Invalid JSON: {str(je)}"]
+        )
+        return result.json()
 
 @function_tool
 def web_search(location: str, data_type: str) -> str:
@@ -229,24 +320,13 @@ def analyze_comparables(property_data: str, comparables: str) -> str:
         
         # This would contain more complex analysis logic in production
         analysis = {
-            "key_factors": [
-                "size_sqm",
-                "condition",
-                "year_built"
-            ],
-            "price_factors": {
-                "size_impact": "high",
-                "condition_impact": "medium",
-                "year_built_impact": "low"
-            },
-            "rent_factors": {
-                "size_impact": "high",
-                "condition_impact": "high",
-                "year_built_impact": "low"
-            }
+            "key_factors": ["size_sqm", "condition", "year_built"],
+            "price_factors": {"size_impact": "high", "condition_impact": "medium", "year_built_impact": "low"},
+            "rent_factors": {"size_impact": "high", "condition_impact": "high", "year_built_impact": "low"}
         }
-        
-        return json.dumps(analysis)
+        # validate output
+        validated = ComparablesAnalysis(**analysis)
+        return validated.json()
     except Exception as e:
         logger.error(f"Error analyzing comparables: {str(e)}")
         return json.dumps({"error": str(e)})
@@ -307,25 +387,13 @@ def analyze_investment_efficiency(property_data: str) -> str:
         # In production, this would contain complex investment analysis
         analysis = {
             "suboptimal_aspects": [
-                {
-                    "aspect": "financing",
-                    "current": "5.2% interest rate, 20% down payment",
-                    "potential_improvement": "4.5% interest rate available, 25% down payment would reduce PMI"
-                },
-                {
-                    "aspect": "rental_income",
-                    "current": "10% below market rate",
-                    "potential_improvement": "Increasing rent to market rate would improve cash flow by 10%"
-                },
-                {
-                    "aspect": "expenses",
-                    "current": "High property management fees (10%)",
-                    "potential_improvement": "Market average is 8%, potential for negotiation"
-                }
+                {"aspect": "financing", "current": "5.2% interest rate, 20% down payment", "potential_improvement": "4.5% interest rate available, 25% down payment would reduce PMI"},
+                {"aspect": "rental_income", "current": "10% below market rate", "potential_improvement": "Increasing rent to market rate would improve cash flow by 10%"},
+                {"aspect": "expenses", "current": "High property management fees (10%)", "potential_improvement": "Market average is 8%, potential for negotiation"}
             ]
         }
-        
-        return json.dumps(analysis)
+        validated = EfficiencyAnalysis(**analysis)
+        return validated.json()
     except Exception as e:
         logger.error(f"Error analyzing investment efficiency: {str(e)}")
         return json.dumps({"error": str(e)})
@@ -351,37 +419,13 @@ def simulate_optimizations(property_data: str, potential_changes: str) -> str:
         # In production, this would run financial simulations
         results = {
             "simulations": [
-                {
-                    "change": "refinance_to_lower_rate",
-                    "impact": {
-                        "monthly_cash_flow": "+120 EUR",
-                        "cash_on_cash_roi": "+0.8%",
-                        "implementation_cost": "2000 EUR",
-                        "payback_period": "17 months"
-                    }
-                },
-                {
-                    "change": "increase_rent_to_market",
-                    "impact": {
-                        "monthly_cash_flow": "+150 EUR",
-                        "cash_on_cash_roi": "+1.0%",
-                        "implementation_cost": "0 EUR",
-                        "payback_period": "immediate"
-                    }
-                },
-                {
-                    "change": "reduce_management_fees",
-                    "impact": {
-                        "monthly_cash_flow": "+50 EUR",
-                        "cash_on_cash_roi": "+0.3%",
-                        "implementation_cost": "0 EUR",
-                        "payback_period": "immediate"
-                    }
-                }
+                {"change": "refinance_to_lower_rate", "impact": {"monthly_cash_flow": "+120 EUR", "cash_on_cash_roi": "+0.8%", "implementation_cost": "2000 EUR", "payback_period": "17 months"}},
+                {"change": "increase_rent_to_market", "impact": {"monthly_cash_flow": "+150 EUR", "cash_on_cash_roi": "+1.0%", "implementation_cost": "0 EUR", "payback_period": "immediate"}},
+                {"change": "reduce_management_fees", "impact": {"monthly_cash_flow": "+50 EUR", "cash_on_cash_roi": "+0.3%", "implementation_cost": "0 EUR", "payback_period": "immediate"}}
             ]
         }
-        
-        return json.dumps(results)
+        validated = SimulationResults(**results)
+        return validated.json()
     except Exception as e:
         logger.error(f"Error simulating optimizations: {str(e)}")
         return json.dumps({"error": str(e)})

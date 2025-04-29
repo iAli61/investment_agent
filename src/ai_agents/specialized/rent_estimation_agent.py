@@ -45,6 +45,56 @@ class RentEstimateResult(BaseModel):
     confidence_score: float
     explanation: str
 
+# Check for LangChain dependencies
+try:
+    from langchain_community.utilities import GoogleSerperAPIWrapper
+    from langchain_community.document_loaders import WebBaseLoader
+    has_langchain = True
+    logger.info("[Rent Estimation] LangChain dependencies loaded")
+except ImportError:
+    has_langchain = False
+    logger.warning("[Rent Estimation] LangChain dependencies not available")
+
+# Define LangChain-enhanced rent search tool
+if has_langchain:
+    @function_tool
+    def search_rental_data_with_langchain(location: str, property_type: str) -> str:
+        """
+        Search for comparable rental listings using LangChain-enhanced search.
+        """
+        logger.info(f"[Rent Estimation] LangChain searching rentals in {location} for {property_type}")
+        try:
+            search = GoogleSerperAPIWrapper()
+            results = search.results(f"{location} {property_type} rental listings average rent")
+            items = results.get("organic", [])[:5]
+            entries = []
+            for it in items:
+                title = it.get("title") or it.get("link")
+                snippet = it.get("snippet", "")
+                entries.append({"title": title, "snippet": snippet, "link": it.get("link")})
+            return json.dumps({"results": entries, "langchain_enhanced": True})
+        except Exception as e:
+            logger.error(f"[Rent Estimation] LangChain search error: {e}")
+            return json.dumps({"results": [], "error": str(e), "langchain_enhanced": False})
+
+    @function_tool
+    def analyze_rent_trends_with_langchain(historical_data: str) -> str:
+        """
+        Analyze rental trends from historical data using LangChain.
+        """
+        logger.info("[Rent Estimation] Analyzing rent trends with LangChain")
+        try:
+            data = json.loads(historical_data)
+            loader = WebBaseLoader(data.get("source_url"))
+            docs = loader.load()
+            text = docs[0].page_content if docs else ""
+            # simple placeholder analysis
+            trend = "increasing" if "increase" in text else "stable"
+            return json.dumps({"trend": trend, "langchain_enhanced": True})
+        except Exception as e:
+            logger.error(f"[Rent Estimation] Trend analysis error: {e}")
+            return json.dumps({"trend": "unknown", "error": str(e), "langchain_enhanced": False})
+
 def create_rent_estimation_agent() -> Agent:
     """Create and configure the Rent Estimation Agent."""
     
@@ -94,8 +144,11 @@ def create_rent_estimation_agent() -> Agent:
     set_default_openai_client(openai_client)
     logger.info("[Rent Estimation] OpenAI client configured for agent")
 
-    # Log the available tools
+    # Define tools list
     tools = [query_market_data, analyze_comparables, parse_property_text]
+    if has_langchain:
+        tools.extend([search_rental_data_with_langchain, analyze_rent_trends_with_langchain])
+    # Log the available tools
     tool_names = [tool.__name__ if hasattr(tool, '__name__') else tool.name for tool in tools]
     logger.info(f"[Rent Estimation] Setting up agent with tools: {', '.join(tool_names)}")
 
