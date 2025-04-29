@@ -131,27 +131,166 @@ The memory system provides context maintenance across interactions:
    - Adapts responses based on user expertise level
    - Persists preferences across sessions
 
-### Prompt Engineering Framework
+### Real-Time Update System
 
-The system implements improved prompt engineering with LangChain's templating capabilities:
+```
+┌────────────────────────┐
+│   Real-Time Updates    │
+└───────────┬────────────┘
+            │
+┌───────────┴────────────┐
+│                        │
+▼                        ▼
+┌────────────────┐  ┌────────────────┐
+│ Metric         │  │ Server-Sent    │
+│ Calculation    │  │ Events Channel │
+└────────┬───────┘  └────────┬───────┘
+         │                   │
+         ▼                   ▼
+┌────────────────┐  ┌────────────────┐
+│ Calculation    │  │ Client-Side    │
+│ Engine API     │  │ UI Updates     │
+└────────────────┘  └────────────────┘
+```
 
-1. **System Prompts**: Carefully designed instructions for each agent role
-   - Manager Agent: Expert investment advisor coordinating specialized agents
-   - Market Data Agent: Specialist in gathering property market information
-   - Rent Estimation Agent: Expert in rental property income analysis
-   - Document Analysis Agent: Specialist in extracting information from property documents
-   - Risk Analysis Agent: Expert in identifying and quantifying investment risks
-   - Strategy Agent: Specialist in optimizing investment approach
+The real-time update system provides immediate feedback on input changes:
 
-2. **Prompt Templates**: Standardized formats for different agent roles
-   - ChatPromptTemplates for conversational interactions
-   - SystemMessagePromptTemplates for consistent base instructions
-   - MessagesPlaceholder for maintaining conversation history
+1. **Metric Calculation Engine**
+   - Performs fast, incremental calculations when inputs change
+   - Caches intermediate results for efficiency
+   - Prioritizes high-impact metrics for immediate updates
 
-3. **Few-Shot Examples**: When appropriate, to guide specific agent behaviors
-   - Examples of market data analysis for different property types
-   - Examples of risk assessment at different confidence levels
-   - Examples of document extraction for various document types
+2. **Server-Sent Events (SSE) Channel**
+   - Implements SSE for streaming updates to the frontend
+   - Maintains persistent connection for real-time data flow
+   - Handles reconnection and backpressure
+
+3. **Client-Side Update Logic**
+   - Updates UI components as new data arrives
+   - Animates transitions for metric changes
+   - Provides visual indicators of calculation status
+
+### Scenario Management System
+
+```
+┌────────────────────────┐
+│   Scenario Management  │
+└───────────┬────────────┘
+            │
+┌───────────┴────────────┐
+│                        │
+▼                        ▼
+┌────────────────┐  ┌────────────────┐
+│ Scenario       │  │ Comparison     │
+│ Service        │  │ Engine         │
+└────────┬───────┘  └────────┬───────┘
+         │                   │
+         ▼                   ▼
+┌────────────────┐  ┌────────────────┐
+│ Scenario       │  │ Diff           │
+│ Repository     │  │ Visualization  │
+└────────────────┘  └────────────────┘
+```
+
+The scenario management system supports comparison and storage of investment scenarios:
+
+1. **Scenario Service**
+   - Provides CRUD operations for investment scenarios
+   - Supports cloning and modification of existing scenarios
+   - Manages scenario metadata and status
+
+2. **Comparison Engine**
+   - Calculates differences between scenarios
+   - Identifies key metric variations
+   - Generates natural language explanations of differences
+
+3. **Scenario Repository**
+   - Persists scenarios in the database with status tracking
+   - Supports tagging and categorization
+   - Implements version control for scenario iterations
+
+### Cost Tracking System
+
+```
+┌────────────────────────┐
+│   Cost Tracking        │
+└───────────┬────────────┘
+            │
+┌───────────┴────────────┐
+│                        │
+▼                        ▼
+┌────────────────┐  ┌────────────────┐
+│ Token Usage    │  │ Compute        │
+│ Middleware     │  │ Cost Tracker   │
+└────────┬───────┘  └────────┬───────┘
+         │                   │
+         ▼                   ▼
+┌────────────────┐  ┌────────────────┐
+│ Usage          │  │ Cost           │
+│ Analytics      │  │ Reporting      │
+└────────────────┘  └────────────────┘
+```
+
+The cost tracking system monitors and reports on AI and infrastructure costs:
+
+1. **Token Usage Middleware**
+   - Intercepts API calls to LLM providers
+   - Counts tokens used per request
+   - Calculates associated costs based on current pricing
+
+2. **Compute Cost Tracker**
+   - Monitors CPU/GPU usage for local operations
+   - Estimates infrastructure costs for hosted scenarios
+   - Aggregates costs across the application
+
+3. **Usage Analytics**
+   - Provides dashboards for cost monitoring
+   - Identifies optimization opportunities
+   - Supports budgeting and forecasting
+
+### Internationalization (i18n) System
+
+```
+┌────────────────────────┐
+│   i18n System          │
+└───────────┬────────────┘
+            │
+┌───────────┴────────────┐
+│                        │
+▼                        ▼
+┌────────────────┐  ┌────────────────┐
+│ UI             │  │ Prompt         │
+│ Translation    │  │ Templates      │
+└────────┬───────┘  └────────┬───────┘
+         │                   │
+         ▼                   ▼
+┌────────────────┐  ┌────────────────┐
+│ Locale         │  │ Language       │
+│ Selection      │  │ Detection      │
+└────────────────┘  └────────────────┘
+```
+
+The internationalization system provides multilingual support:
+
+1. **UI Translation Layer**
+   - Translates interface elements based on locale
+   - Supports right-to-left languages when needed
+   - Manages number and date formatting
+
+2. **Prompt Templates**
+   - Maintains separate prompt templates for each language
+   - Adapts examples and instructions to cultural context
+   - Preserves technical accuracy across translations
+
+3. **Locale Selection**
+   - Allows users to explicitly select language preference
+   - Remembers preference across sessions
+   - Supports language-specific settings
+
+4. **Language Detection**
+   - Automatically detects user language when possible
+   - Falls back to browser/system settings
+   - Respects explicit user preferences
 
 ## Implementation Details
 
@@ -173,6 +312,16 @@ The enhanced AI agent system is implemented with the following technologies:
 3. **LLM Providers**
    - Primary: Azure OpenAI Service
    - Fallback: Direct OpenAI API access
+
+4. **Real-Time Technologies**
+   - Server-Sent Events (SSE) for streaming updates
+   - WebSockets for bidirectional communication (optional)
+   - React for reactive UI updates
+
+5. **Internationalization**
+   - i18next for UI translations
+   - Language-specific prompt templates
+   - Azure Translator API for dynamic translations (optional)
 
 ### Core Classes and Components
 
@@ -196,6 +345,26 @@ The enhanced AI agent system is implemented with the following technologies:
    - Provides standardized templates for agent interactions
    - Implements dynamic prompt construction with context
 
+5. **ScenarioService**
+   - Manages the creation and comparison of investment scenarios
+   - Provides CRUD operations for scenarios
+   - Implements diff algorithms for scenario comparison
+
+6. **MetricCalculator**
+   - Performs real-time calculations based on input changes
+   - Streams updates to the frontend
+   - Supports incremental recalculation for efficiency
+
+7. **CostTracker**
+   - Monitors and records LLM API usage
+   - Calculates estimated costs per scenario
+   - Provides analytics on usage patterns
+
+8. **TranslationService**
+   - Manages translations for UI elements and prompts
+   - Supports dynamic language switching
+   - Handles language-specific formatting
+
 ### Implementation Phases
 
 The system will be implemented in the following phases:
@@ -204,21 +373,27 @@ The system will be implemented in the following phases:
    - Implement Vector Database integration
    - Create Memory Management System
    - Enhance Agent Orchestrator
+   - Add Scenario Management capability
+   - Implement i18n foundation
+   - Add Cost Tracking middleware
 
 2. **Phase 2: Agent Enhancement**
    - Upgrade specialized agents with LangChain tools
    - Implement improved system prompts
    - Create new Risk Analysis and Strategy agents
+   - Add multi-language support for prompts
 
 3. **Phase 3: Tool Enhancement**
    - Standardize calculation tools
    - Implement comprehensive guardrails
    - Create verification components for output validation
+   - Implement real-time update system
 
 4. **Phase 4: Integration and Testing**
    - Connect all components using LCEL
    - Implement comprehensive testing with LangSmith
    - Optimize performance and resource usage
+   - Validate multi-language support
 
 ## Azure OpenAI Integration
 
