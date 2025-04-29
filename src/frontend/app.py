@@ -37,8 +37,11 @@ if "units" not in st.session_state:
     st.session_state.units = []
 if "tab_change_requested" not in st.session_state:
     st.session_state.tab_change_requested = False
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# Chat state
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
+if "chat_context" not in st.session_state:
+    st.session_state.chat_context = {}
 
 # Helper functions
 def fetch_market_data(location, property_type):
@@ -286,49 +289,39 @@ st.markdown('<div class="main-header">Property Investment Analysis</div>', unsaf
 st.markdown("Analyze real estate investments with AI-powered insights")
 st.markdown("---")
 
-# Sidebar for navigation and chat
+# Sidebar
 with st.sidebar:
-    st.header("Property Investment Analysis")
-
-    # Chat input
-    st.markdown("### AI Chat Assistant")
-    user_message = st.text_input("Ask me anything about property investment:")
-    if user_message:
-        # Send message to backend
-        payload = {"message": user_message, "context": {}}
-        try:
-            response = requests.post(f"{API_URL}/ai/conversation/", json=payload)
-            response.raise_for_status()
-            result = response.json()
-            st.session_state.chat_history.append({"user": user_message, "ai": result["response"]})
-
-            # Display chat history
-            for chat in st.session_state.chat_history:
-                st.markdown(f"**You:** {chat['user']}")
-                st.markdown(f"**AI:** {chat['ai']}")
-
-            # Display suggestions as buttons
-            if result.get("suggestions"):
-                for suggestion in result["suggestions"]:
-                    if st.button(suggestion):
-                        st.write(f"Clicked: {suggestion}")  # Replace with actual logic
-        except requests.exceptions.RequestException as e:
-            st.error(f"Error during conversation: {e}")
-
-    # Navigation buttons
-    st.markdown("### Navigation")
-    if st.button("Property Details"):
-        change_tab("Property Details")
-    if st.button("Rental Units"):
-        change_tab("Rental Units")
-    if st.button("Financing"):
-        change_tab("Financing")
-    if st.button("Expenses"):
-        change_tab("Expenses")
-    if st.button("Tax"):
-        change_tab("Tax")
-    if st.button("Analysis"):
-        change_tab("Analysis")
+    st.markdown("## Navigation")
+    tabs = [
+        "Property Input", 
+        "Rental Units", 
+        "Financing", 
+        "Expenses & Tax", 
+        "Analysis Results"
+    ]
+    
+    # Only update the tab if it was changed directly in the sidebar
+    selected_tab = st.radio("Select Section", tabs, index=tabs.index(st.session_state.current_tab))
+    if selected_tab != st.session_state.current_tab and not st.session_state.tab_change_requested:
+        st.session_state.current_tab = selected_tab
+    
+    # Reset the tab change request flag
+    if st.session_state.tab_change_requested:
+        st.session_state.tab_change_requested = False
+    
+    st.markdown("---")
+    st.markdown("## About")
+    st.markdown("""
+    This application helps real estate investors analyze properties by:
+    
+    * Calculating acquisition costs
+    * Estimating rental income with AI
+    * Analyzing financing options
+    * Projecting cash flow and returns
+    * Assessing investment risks
+    
+    Powered by AI agents for real-time market data.
+    """)
 
 # Main content
 if st.session_state.current_tab == "Property Input":
@@ -1006,7 +999,7 @@ elif st.session_state.current_tab == "Expenses & Tax":
         
         The German tax system is progressive, so the higher your income tax rate, the more valuable these deductions become.
         """)
-    
+
     # Save expenses and tax data
     if st.button("Save Expenses & Tax Details"):
         expenses_data = {
@@ -1285,3 +1278,95 @@ elif st.session_state.current_tab == "Analysis Results":
             
             st.session_state.current_tab = "Property Input"
             st.rerun()
+
+# Chat Component
+def chat_panel():
+    """Display and handle the chat panel with AI agent interaction."""
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("## AI Assistant")
+    
+    # Display chat history
+    chat_container = st.sidebar.container()
+    with chat_container:
+        for message in st.session_state.chat_messages:
+            if message["role"] == "user":
+                st.markdown(f"**You**: {message['content']}")
+            else:
+                st.markdown(f"**AI**: {message['content']}")
+    
+    # Display suggestions if available
+    if "suggestions" in st.session_state and st.session_state.suggestions:
+        st.sidebar.markdown("### Suggested Actions")
+        for suggestion in st.session_state.suggestions:
+            if st.sidebar.button(suggestion):
+                # Handle suggestion click
+                handle_suggestion(suggestion)
+    
+    # Chat input
+    user_input = st.sidebar.text_area("Ask a question about investment analysis:", key="chat_input", height=100)
+    
+    # Add a send button
+    if st.sidebar.button("Send", key="send_chat"):
+        if user_input:
+            # Add user message to chat history
+            st.session_state.chat_messages.append({"role": "user", "content": user_input})
+            
+            # Send to backend
+            with st.sidebar.status("Thinking..."):
+                try:
+                    response = requests.post(
+                        f"{API_URL}/ai/conversation/",
+                        json={
+                            "message": user_input,
+                            "context": st.session_state.chat_context
+                        }
+                    )
+                    response.raise_for_status()  # Raise exception for HTTP errors
+                    result = response.json()
+                    
+                    # Add AI response to chat history
+                    st.session_state.chat_messages.append({"role": "assistant", "content": result["response"]})
+                    
+                    # Store suggestions
+                    st.session_state.suggestions = result["suggestions"]
+                    
+                    # Update context
+                    st.session_state.chat_context = result["context"]
+                    
+                    # Clear the input
+                    st.session_state.chat_input = ""
+                except Exception as e:
+                    st.sidebar.error(f"Error: {str(e)}")
+            
+            # Rerun to update UI
+            st.rerun()
+
+def handle_suggestion(suggestion: str):
+    """Handle when user clicks on a suggestion."""
+    if "Enter property details" in suggestion:
+        change_tab("Property Input")
+    elif "Upload property document" in suggestion:
+        st.sidebar.info("Document upload feature will be added in a future update.")
+    elif "Continue with investment analysis" in suggestion:
+        # Determine where to go next based on current state
+        if st.session_state.current_property and not st.session_state.units:
+            change_tab("Rental Units")
+        elif st.session_state.current_property and st.session_state.units and "financing_data" not in st.session_state:
+            change_tab("Financing")
+        elif st.session_state.current_property and st.session_state.units and "financing_data" in st.session_state and "expenses_data" not in st.session_state:
+            change_tab("Expenses & Tax")
+        elif st.session_state.analysis_result:
+            change_tab("Analysis Results")
+        else:
+            change_tab("Property Input")
+    else:
+        # For custom suggestions in the future
+        st.session_state.chat_messages.append({"role": "user", "content": suggestion})
+        st.session_state.chat_messages.append({"role": "assistant", "content": f"I'll help you with '{suggestion}'. Please provide more details."})
+
+# Initialize suggestions in session state
+if "suggestions" not in st.session_state:
+    st.session_state.suggestions = []
+
+# Add the chat panel to the sidebar
+chat_panel()
