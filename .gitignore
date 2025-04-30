@@ -70,3 +70,5 @@ uv.lock
 src/backend/__pycache__/api.cpython-310.pyc
 vector_db
 agent_memory.json
+components
+red-1.md
