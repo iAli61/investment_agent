@@ -9,7 +9,7 @@ import asyncio
 import os
 from typing import Dict, Any, Optional, List
 
-from agents import Agent, Runner
+from agents import Agent, Runner, set_tracing_disabled
 
 from .orchestrator import AgentOrchestrator, create_manager_agent, TaskResult
 from .specialized import (
@@ -22,9 +22,19 @@ from .guardrails import create_guardrails
 from openai import AsyncAzureOpenAI
 from agents import set_default_openai_client
 
+# Ensure tracing is disabled for OpenAI Agents SDK
+os.environ["OPENAI_AGENTS_DISABLE_TRACING"] = "1"
+try:
+    set_tracing_disabled(True)
+except Exception as e:
+    pass  # Silently continue if this fails, the env var will still help
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Create an agent registry to track available agents
+agent_registry = {}
 
 # Monkey patch Agent class to add guardrails attribute if it doesn't exist
 if not hasattr(Agent, 'guardrails'):

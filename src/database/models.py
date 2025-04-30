@@ -1,186 +1,182 @@
 """
-Database models for the Property Investment Analysis App
+Database models for the Property Investment Analysis Application
 """
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+import uuid
 from datetime import datetime
+from typing import Dict, Any, List, Optional
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, JSON, Text
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
 class User(Base):
-    """User model for authentication and personalization"""
+    """User model for authentication and user-specific data"""
     __tablename__ = "users"
-
+    
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True)
     email = Column(String(100), unique=True, index=True)
     hashed_password = Column(String(200))
-    first_name = Column(String(50), nullable=True)
-    last_name = Column(String(50), nullable=True)
+    full_name = Column(String(100))
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
     
     # Relationships
     properties = relationship("Property", back_populates="user")
+    scenarios = relationship("Scenario", back_populates="user")
+    preferences = relationship("UserPreference", back_populates="user", uselist=False)
     
     def __repr__(self):
         return f"<User {self.username}>"
 
+class UserPreference(Base):
+    """User preferences for customization and personalization"""
+    __tablename__ = "user_preferences"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    expertise_level = Column(String(20), default="beginner")  # beginner, intermediate, advanced
+    preferred_currency = Column(String(3), default="USD")
+    ui_theme = Column(String(20), default="light")  # light, dark
+    notification_preferences = Column(JSON, default={})
+    language = Column(String(10), default="en")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Custom preferences stored as JSON
+    custom_preferences = Column(JSON, default={})
+    
+    # Relationships
+    user = relationship("User", back_populates="preferences")
+    
+    def __repr__(self):
+        return f"<UserPreference for {self.user_id}>"
+
 class Property(Base):
-    """Property model to store property details"""
+    """Property model for storing property information"""
     __tablename__ = "properties"
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
-    address = Column(String(255), nullable=False)
-    purchase_price = Column(Float, nullable=False)
-    property_type = Column(String(50))  # apartment, house, multi-family, commercial
+    public_id = Column(String(50), default=lambda: str(uuid.uuid4())[:8], unique=True)
+    name = Column(String(100))
+    address = Column(String(200))
+    city = Column(String(100))
+    state = Column(String(100))
+    zip_code = Column(String(20))
+    country = Column(String(100))
+    property_type = Column(String(50))  # single-family, multi-family, commercial, etc.
     year_built = Column(Integer, nullable=True)
     size_sqm = Column(Float, nullable=True)
     num_units = Column(Integer, default=1)
-    condition_assessment = Column(String(50), nullable=True)  # excellent, good, average, fair, poor
-    region = Column(String(50), default="berlin")
-    location = Column(String(100), nullable=True)
-    property_age_years = Column(Integer, nullable=True)
-    closing_costs = Column(Float, nullable=True)
-    total_acquisition_cost = Column(Float, nullable=True)
+    purchase_price = Column(Float, nullable=True)
+    current_value = Column(Float, nullable=True)
+    status = Column(String(20), default="draft")  # draft, active, archived, sold
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Property details as JSON
+    property_details = Column(JSON, default={})
     
     # Relationships
     user = relationship("User", back_populates="properties")
-    rental_units = relationship("RentalUnit", back_populates="property", cascade="all, delete-orphan")
-    expenses = relationship("Expense", back_populates="property", cascade="all, delete-orphan")
-    financing = relationship("Financing", back_populates="property", cascade="all, delete-orphan", uselist=False)
-    analyses = relationship("Analysis", back_populates="property", cascade="all, delete-orphan")
+    scenarios = relationship("Scenario", back_populates="property")
     
     def __repr__(self):
-        return f"<Property {self.address}>"
+        return f"<Property {self.name}>"
 
-class RentalUnit(Base):
-    """Rental unit model for multi-unit properties"""
-    __tablename__ = "rental_units"
+class Scenario(Base):
+    """Investment scenario model for storing different investment scenarios"""
+    __tablename__ = "scenarios"
     
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
     property_id = Column(Integer, ForeignKey("properties.id"))
-    unit_number = Column(String(20), nullable=True)
-    size_sqm = Column(Float, nullable=True)
-    num_bedrooms = Column(Integer, nullable=True)
-    num_bathrooms = Column(Float, nullable=True)  # Allow 0.5 for half bathrooms
-    is_occupied = Column(Boolean, default=False)
-    current_rent = Column(Float, nullable=True)
-    potential_rent = Column(Float, nullable=True)
-    lease_start_date = Column(DateTime, nullable=True)
-    lease_end_date = Column(DateTime, nullable=True)
-    tenant_name = Column(String(100), nullable=True)
-    features = Column(JSON, nullable=True)  # Store features as JSON array
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    property = relationship("Property", back_populates="rental_units")
-    
-    def __repr__(self):
-        return f"<RentalUnit {self.unit_number} of Property {self.property_id}>"
-
-class Financing(Base):
-    """Financing model for property financing details"""
-    __tablename__ = "financing"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    property_id = Column(Integer, ForeignKey("properties.id"), unique=True)
-    loan_amount = Column(Float, nullable=False)
-    interest_rate = Column(Float, nullable=False)
-    repayment_rate = Column(Float, nullable=False)
-    term_years = Column(Integer, nullable=False)
-    monthly_payment = Column(Float, nullable=True)
-    available_cash = Column(Float, nullable=True)
-    down_payment = Column(Float, nullable=True)
-    down_payment_percentage = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    property = relationship("Property", back_populates="financing")
-    
-    def __repr__(self):
-        return f"<Financing for Property {self.property_id}>"
-
-class Expense(Base):
-    """Expense model for property operating expenses"""
-    __tablename__ = "expenses"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    property_id = Column(Integer, ForeignKey("properties.id"))
-    name = Column(String(100), nullable=False)
-    amount = Column(Float, nullable=False)
-    frequency = Column(String(20), nullable=False)  # annual, monthly, quarterly
-    is_percentage = Column(Boolean, default=False)  # True if amount is a percentage of income
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relationships
-    property = relationship("Property", back_populates="expenses")
-    
-    def __repr__(self):
-        return f"<Expense {self.name} for Property {self.property_id}>"
-
-class Analysis(Base):
-    """Analysis model to store property investment analysis results"""
-    __tablename__ = "analyses"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    property_id = Column(Integer, ForeignKey("properties.id"))
-    cash_flow_monthly = Column(Float, nullable=False)
-    cash_flow_annual = Column(Float, nullable=False)
-    cash_on_cash_return = Column(Float, nullable=False)
-    cap_rate = Column(Float, nullable=False)
-    roi = Column(Float, nullable=False)
-    tax_benefits_annual = Column(Float, nullable=True)
-    risk_assessment = Column(Text, nullable=True)
-    full_analysis_data = Column(JSON, nullable=True)  # Store full analysis results as JSON
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    property = relationship("Property", back_populates="analyses")
-    
-    def __repr__(self):
-        return f"<Analysis for Property {self.property_id}>"
-
-class MarketData(Base):
-    """Market data model to store property market data collected by AI agents"""
-    __tablename__ = "market_data"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    location = Column(String(100), index=True)
-    property_type = Column(String(50), index=True)
-    avg_price_sqm = Column(Float, nullable=True)
-    avg_rent_sqm = Column(Float, nullable=True)
-    vacancy_rate = Column(Float, nullable=True)
-    price_trend = Column(Float, nullable=True)  # Percentage change YoY
-    rent_trend = Column(Float, nullable=True)  # Percentage change YoY
-    sources = Column(JSON, nullable=True)  # List of data sources
-    confidence_level = Column(Float, nullable=True)  # 0-1 range
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    
-    def __repr__(self):
-        return f"<MarketData for {self.location}, {self.property_type}>"
-
-class AgentTask(Base):
-    """Agent task model to track AI agent tasks and results"""
-    __tablename__ = "agent_tasks"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    task_id = Column(String(50), unique=True, index=True)
-    agent_type = Column(String(50), nullable=False)
+    name = Column(String(100))
     description = Column(Text, nullable=True)
-    status = Column(String(20), default="pending")  # pending, running, completed, failed
-    parameters = Column(JSON, nullable=True)
-    result = Column(JSON, nullable=True)
-    error = Column(Text, nullable=True)
+    is_baseline = Column(Boolean, default=False)
+    status = Column(String(20), default="draft")  # draft, active, archived
+    
+    # Financing parameters
+    financing_params = Column(JSON, default={})
+    # Rental parameters
+    rental_params = Column(JSON, default={})
+    # Expense parameters
+    expense_params = Column(JSON, default={})
+    
+    # Results of calculations
+    results = Column(JSON, nullable=True)
+    # Warnings or alerts
+    warnings = Column(JSON, nullable=True)
+    # LLM cost for analysis
+    llm_cost = Column(Float, default=0.0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="scenarios")
+    property = relationship("Property", back_populates="scenarios")
+    
+    def __repr__(self):
+        return f"<Scenario {self.name} for Property {self.property_id}>"
+
+class AgentMemoryItem(Base):
+    """Memory item for AI agents"""
+    __tablename__ = "agent_memory_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
+    scenario_id = Column(Integer, ForeignKey("scenarios.id"), nullable=True)
+    
+    memory_type = Column(String(50))  # conversation, preference, fact, error
+    key = Column(String(100))
+    value = Column(JSON)
+    memory_metadata = Column(JSON, default={})
+    ttl = Column(DateTime, nullable=True)  # Time to live, nullable for permanent memories
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     def __repr__(self):
-        return f"<AgentTask {self.task_id} for {self.agent_type}>"
+        return f"<AgentMemoryItem {self.key}>"
+
+class CostTracker(Base):
+    """Track API costs for LLM usage"""
+    __tablename__ = "cost_tracker"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
+    scenario_id = Column(Integer, ForeignKey("scenarios.id"), nullable=True)
+    
+    operation_type = Column(String(50))  # analysis, conversation, extraction
+    model = Column(String(50))  # gpt-4, gpt-3.5-turbo, etc.
+    tokens_input = Column(Integer, default=0)
+    tokens_output = Column(Integer, default=0)
+    cost_usd = Column(Float, default=0.0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<CostTracker {self.operation_type} ${self.cost_usd}>"
+
+class AnalyticsEvent(Base):
+    """Track analytics events for monitoring usage patterns"""
+    __tablename__ = "analytics_events"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    event_type = Column(String(50))  # page_view, feature_use, error
+    event_name = Column(String(100))
+    properties = Column(JSON, default={})
+    session_id = Column(String(100), nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<AnalyticsEvent {self.event_type} {self.event_name}>"

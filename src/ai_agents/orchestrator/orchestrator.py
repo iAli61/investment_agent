@@ -28,6 +28,22 @@ except ImportError:
     logger.warning("RAG or Memory components not available. Some features will be limited.")
     HAS_ADVANCED_COMPONENTS = False
 
+# Singleton orchestrator instance
+_orchestrator_instance = None
+
+def get_orchestrator() -> 'AgentOrchestrator':
+    """
+    Get the singleton instance of the AgentOrchestrator.
+    
+    Returns:
+        AgentOrchestrator instance
+    """
+    global _orchestrator_instance
+    if _orchestrator_instance is None:
+        logger.info("[Orchestrator] Creating new orchestrator instance")
+        _orchestrator_instance = AgentOrchestrator()
+    return _orchestrator_instance
+
 class TaskResult(BaseModel):
     """Result of a task executed by an agent."""
     task_id: str

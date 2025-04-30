@@ -46,6 +46,12 @@ async def setup_azure_openai_client():
         return None
     
     try:
+        # Disable tracing completely for the Agents SDK before client creation
+        # This ensures tracing is disabled before any client operations
+        os.environ["OPENAI_AGENTS_DISABLE_TRACING"] = "1"
+        set_tracing_disabled(True)
+        logger.info("Tracing has been disabled for the Agents SDK")
+        
         # Create Azure OpenAI client with explicit API version
         openai_client = AsyncAzureOpenAI(
             api_key=os.getenv("AZURE_OPENAI_API_KEY"),
@@ -53,16 +59,6 @@ async def setup_azure_openai_client():
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
             azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
         )
-        
-        # Disable tracing completely for the Agents SDK
-
-        if os.getenv("OPENAI_AGENTS_DISABLE_TRACING", "0") == "1":
-            set_tracing_disabled(True)
-            logger.info("Tracing has been disabled for the Agents SDK")
-        else:
-            # todo: enable tracing if needed
-            assert False, "Tracing is not yet implemented for the Agents SDK"
-        
         
         # Set as default client for Agents SDK
         set_default_openai_client(openai_client)

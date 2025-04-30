@@ -1,43 +1,42 @@
 """
-Main backend API for the Property Investment Analysis App
+API endpoints for the Property Investment Analysis Application
 """
-import os
 import logging
-from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Request
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-import uuid
-import asyncio
 import json
+import os
+from typing import List, Dict, Any, Optional
+from fastapi import Depends, HTTPException, BackgroundTasks, Query, Body, FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from sse_starlette.sse import EventSourceResponse
 from datetime import datetime
 
 from ..database.database import get_db
-from ..database.models import User, Property, RentalUnit, Expense, Financing, Analysis
-from ..ai_agents.orchestrator import orchestrator
-from ..ai_agents import AIAgentSystem
-from ..utils.financial_utils import analyze_property_investment 
+from ..database.models import User, Property, Scenario, AgentMemoryItem
+from ..ai_agents.orchestrator.orchestrator import get_orchestrator
+from ..ai_agents.agent_system import AIAgentSystem
+from ..ai_agents.orchestrator.manager_agent import create_manager_agent
+from ..ai_agents.specialized import (
+    create_market_data_search_agent,
+    create_rent_estimation_agent,
+    create_document_analysis_agent,
+    create_optimization_agent,
+    create_risk_analysis_agent,
+    create_strategy_agent
+)
+from ..utils.sse_updates import SSEManager
 
-# Configure logging
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# AI agent system instance
-ai_agent_system = None
+# Create FastAPI app
+app = FastAPI(title="Property Investment Analysis API", 
+             description="API for property investment analysis with AI agents",
+             version="1.0.0")
 
-# Define AgentTask class
-class AgentTask(BaseModel):
-    task_id: str
-    agent_type: str
-    description: str
-    parameters: Dict[str, Any]
-    status: str = "pending"
-    
-    class Config:
-        orm_mode = True
-
-app = FastAPI(title="Property Investment Analysis API")
-
-# Add CORS middleware
+# Add CORS middleware to allow cross-origin requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # For development; restrict in production
@@ -46,455 +45,683 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Startup event to initialize AI agent system
+# Create SSE manager for real-time updates
+sse_manager = SSEManager()
+
+# Initialize AI Agent System
+agent_system = None
+
 @app.on_event("startup")
 async def startup_event():
-    global ai_agent_system
-    
+    """Initialize the AI agent system on startup."""
+    global agent_system
     try:
-        # Initialize database tables and default data
-        from ..database.database import create_tables, init_db
+        # Disable OpenAI tracing to prevent 401 errors - ensure this is set before ANY OpenAI client creation
+        os.environ["OPENAI_AGENTS_DISABLE_TRACING"] = "1"
         
-        # Create tables if they don't exist
-        logger.info("Creating database tables if they don't exist")
-        create_tables()
+        # If the Agents SDK has a direct function to disable tracing, call it
+        try:
+            from agents import set_tracing_disabled
+            set_tracing_disabled(True)
+            logger.info("Tracing has been explicitly disabled for the Agents SDK")
+        except ImportError:
+            logger.info("Using environment variable method to disable tracing")
         
-        # Initialize database with default data
-        logger.info("Initializing database with default data")
-        init_db()
+        # Initialize AI Agent System with Azure OpenAI integration
+        agent_system = AIAgentSystem(
+            use_azure=True,
+            azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o"),
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+        )
+        agent_system.initialize()
+        logger.info("AI Agent System initialized successfully")
         
-        # Check if Azure OpenAI environment variables are available
-        use_azure = os.environ.get("USE_AZURE_OPENAI", "false").lower() == "true"
-        if use_azure:
-            logger.info("Using Azure OpenAI")
-            azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
-            azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME")
-            azure_api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2023-07-01-preview")
-            use_managed_identity = os.environ.get("AZURE_USE_MANAGED_IDENTITY", "false").lower() == "true"
+        # Initialize orchestrator
+        orchestrator = get_orchestrator()
+        
+        # If needed, register specialized agents directly
+        if not orchestrator.specialized_agents:
+            logger.info("Registering specialized agents with orchestrator")
+            orchestrator.register_specialized_agent("market_data", create_market_data_search_agent())
+            orchestrator.register_specialized_agent("rent_estimation", create_rent_estimation_agent())
+            orchestrator.register_specialized_agent("document_analysis", create_document_analysis_agent())
+            orchestrator.register_specialized_agent("optimization", create_optimization_agent())
+            # Register the risk analysis and strategy agents that were missing
+            logger.info("Registering risk analysis and strategy agents")
+            orchestrator.register_specialized_agent("risk_analysis", create_risk_analysis_agent())
+            orchestrator.register_specialized_agent("strategy", create_strategy_agent())
             
-            # Initialize with Azure OpenAI if environment variables are set
-            if azure_endpoint and azure_deployment:
-                logger.info(f"Using Azure OpenAI with endpoint: {azure_endpoint} and deployment: {azure_deployment}")
-                ai_agent_system = AIAgentSystem(
-                    use_azure=True,
-                    azure_deployment=azure_deployment,
-                    azure_endpoint=azure_endpoint,
-                    azure_api_version=azure_api_version,
-                    use_managed_identity=use_managed_identity
-                )
-            else:
-                # Fall back to standard OpenAI if Azure config is incomplete
-                logger.warning("Azure OpenAI configuration incomplete. Falling back to standard OpenAI.")
-                ai_agent_system = AIAgentSystem(model_name="gpt-4o")
-        else:
-            # Standard OpenAI initialization
-            logger.info("Using Standard OpenAI")
-            ai_agent_system = AIAgentSystem(model_name="gpt-4o")
+        # If manager agent is not initialized, create and register it
+        if not orchestrator.manager_agent:
+            logger.info("Creating and registering manager agent")
+            manager_agent = create_manager_agent(orchestrator.specialized_agents)
+            orchestrator.register_manager_agent(manager_agent)
             
-        # Initialize the AI agent system
-        ai_agent_system.initialize()
-        
-        # Make the orchestrator globally available
-        global orchestrator
-        orchestrator = ai_agent_system.orchestrator
+        logger.info("API startup completed successfully")
     except Exception as e:
-        logger.error(f"Error during startup: {str(e)}")
-        logger.exception("Detailed stack trace follows:")
-        raise
+        logger.error(f"Error initializing AI Agent System: {str(e)}")
+        # Continuing even with error, to allow other parts of the API to work
 
-# Define Pydantic models for request/response validation
-class PropertyBase(BaseModel):
-    address: str
-    purchase_price: float
-    property_type: str
-    year_built: Optional[int] = None
-    size_sqm: Optional[float] = None
-    num_units: int = 1
-    condition_assessment: Optional[str] = None
-    region: str = "berlin"
-    
-    class Config:
-        orm_mode = True
-
-class PropertyCreate(PropertyBase):
-    pass
-
-class PropertyResponse(PropertyBase):
-    id: int
-    user_id: int
-    created_at: datetime
-    updated_at: datetime
-    closing_costs: Optional[float] = None
-    total_acquisition_cost: Optional[float] = None
-    
-    class Config:
-        orm_mode = True
-
-class RentalUnitBase(BaseModel):
-    unit_number: Optional[str] = None
-    size_sqm: Optional[float] = None
-    num_bedrooms: Optional[int] = None
-    num_bathrooms: Optional[float] = None
-    is_occupied: bool = False
-    current_rent: Optional[float] = None
-    potential_rent: Optional[float] = None
-    lease_start_date: Optional[datetime] = None
-    lease_end_date: Optional[datetime] = None
-    tenant_name: Optional[str] = None
-    
-    class Config:
-        orm_mode = True
-
-class RentalUnitCreate(RentalUnitBase):
-    pass
-
-class RentalUnitResponse(RentalUnitBase):
-    id: int
-    property_id: int
-    
-    class Config:
-        orm_mode = True
-
-class FinancingBase(BaseModel):
-    loan_amount: float
-    interest_rate: float
-    repayment_rate: float
-    term_years: int
-    
-    class Config:
-        orm_mode = True
-
-class FinancingCreate(FinancingBase):
-    pass
-
-class FinancingResponse(FinancingBase):
-    id: int
-    property_id: int
-    monthly_payment: Optional[float] = None
-    
-    class Config:
-        orm_mode = True
-
-class ExpenseBase(BaseModel):
-    name: str
-    amount: float
-    frequency: str
-    is_percentage: bool = False
-    
-    class Config:
-        orm_mode = True
-
-class ExpenseCreate(ExpenseBase):
-    pass
-
-class ExpenseResponse(ExpenseBase):
-    id: int
-    property_id: int
-    
-    class Config:
-        orm_mode = True
-
-class AnalysisBase(BaseModel):
-    cash_flow_monthly: float
-    cash_flow_annual: float
-    cash_on_cash_return: float
-    cap_rate: float
-    roi: float
-    tax_benefits_annual: Optional[float] = None
-    risk_assessment: Optional[str] = None
-    
-    class Config:
-        orm_mode = True
-
-class AnalysisCreate(AnalysisBase):
-    pass
-
-class AnalysisResponse(AnalysisBase):
-    id: int
-    property_id: int
-    created_at: datetime
-    
-    class Config:
-        orm_mode = True
-
-class MarketDataRequest(BaseModel):
-    location: str
-    property_type: str
-    additional_filters: Optional[Dict[str, Any]] = None
-
-class RentEstimationRequest(BaseModel):
-    location: str
-    property_type: str
-    size_sqm: float
-    num_bedrooms: Optional[int] = None
-    num_bathrooms: Optional[float] = None
-    features: Optional[List[str]] = []
-    condition: Optional[str] = "average"
-
-class PropertyAnalysisRequest(BaseModel):
-    property_data: Dict[str, Any]
-    units_data: List[Dict[str, Any]]
-    financing_data: Dict[str, Any]
-    expenses_data: Dict[str, Any]
-    tax_data: Dict[str, Any]
-
-# API Routes
-
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the Property Investment Analysis API"}
-
-# Property routes
-@app.post("/properties/", response_model=PropertyResponse)
-async def create_property(property_data: PropertyCreate, db=Depends(get_db)):
-    # In a real app, get user_id from auth token
-    user_id = 1  # Placeholder
-    
-    # Create new property
-    new_property = Property(
-        user_id=user_id,
-        address=property_data.address,
-        purchase_price=property_data.purchase_price,
-        property_type=property_data.property_type,
-        year_built=property_data.year_built,
-        size_sqm=property_data.size_sqm,
-        num_units=property_data.num_units,
-        condition_assessment=property_data.condition_assessment
-    )
-    
-    db.add(new_property)
-    db.commit()
-    db.refresh(new_property)
-    
-    return new_property
-
-@app.get("/properties/", response_model=List[PropertyResponse])
-async def get_properties(db=Depends(get_db)):
-    # In a real app, filter by authenticated user
-    properties = db.query(Property).all()
-    return properties
-
-@app.get("/properties/{property_id}", response_model=PropertyResponse)
-async def get_property(property_id: int, db=Depends(get_db)):
-    property = db.query(Property).filter(Property.id == property_id).first()
-    if not property:
-        raise HTTPException(status_code=404, detail="Property not found")
-    return property
-
-# Rental Unit routes
-@app.post("/properties/{property_id}/units/", response_model=RentalUnitResponse)
-async def create_rental_unit(property_id: int, unit_data: RentalUnitCreate, db=Depends(get_db)):
-    # Check if property exists
-    property = db.query(Property).filter(Property.id == property_id).first()
-    if not property:
-        raise HTTPException(status_code=404, detail="Property not found")
-    
-    # Create new rental unit
-    new_unit = RentalUnit(
-        property_id=property_id,
-        unit_number=unit_data.unit_number,
-        size_sqm=unit_data.size_sqm,
-        num_bedrooms=unit_data.num_bedrooms,
-        num_bathrooms=unit_data.num_bathrooms,
-        is_occupied=unit_data.is_occupied,
-        current_rent=unit_data.current_rent,
-        potential_rent=unit_data.potential_rent,
-        lease_start_date=unit_data.lease_start_date,
-        lease_end_date=unit_data.lease_end_date,
-        tenant_name=unit_data.tenant_name
-    )
-    
-    db.add(new_unit)
-    db.commit()
-    db.refresh(new_unit)
-    
-    return new_unit
-
-@app.get("/properties/{property_id}/units/", response_model=List[RentalUnitResponse])
-async def get_rental_units(property_id: int, db=Depends(get_db)):
-    # Check if property exists
-    property = db.query(Property).filter(Property.id == property_id).first()
-    if not property:
-        raise HTTPException(status_code=404, detail="Property not found")
-    
-    units = db.query(RentalUnit).filter(RentalUnit.property_id == property_id).all()
-    return units
-
-# Financing routes
-@app.post("/properties/{property_id}/financing/", response_model=FinancingResponse)
-async def create_financing(property_id: int, financing_data: FinancingCreate, db=Depends(get_db)):
-    # Check if property exists
-    property = db.query(Property).filter(Property.id == property_id).first()
-    if not property:
-        raise HTTPException(status_code=404, detail="Property not found")
-    
-    # Check if financing already exists for this property
-    existing_financing = db.query(Financing).filter(Financing.property_id == property_id).first()
-    if existing_financing:
-        # Update existing financing
-        for key, value in financing_data.dict().items():
-            setattr(existing_financing, key, value)
-        
-        db.commit()
-        db.refresh(existing_financing)
-        return existing_financing
-    
-    # Create new financing
-    new_financing = Financing(
-        property_id=property_id,
-        loan_amount=financing_data.loan_amount,
-        interest_rate=financing_data.interest_rate,
-        repayment_rate=financing_data.repayment_rate,
-        term_years=financing_data.term_years,
-        monthly_payment=financing_data.loan_amount * (financing_data.interest_rate + financing_data.repayment_rate) / 1200
-    )
-    
-    db.add(new_financing)
-    db.commit()
-    db.refresh(new_financing)
-    
-    return new_financing
-
-@app.get("/properties/{property_id}/financing/", response_model=FinancingResponse)
-async def get_financing(property_id: int, db=Depends(get_db)):
-    financing = db.query(Financing).filter(Financing.property_id == property_id).first()
-    if not financing:
-        raise HTTPException(status_code=404, detail="Financing not found for this property")
-    return financing
-
-# Analysis routes
-@app.post("/properties/{property_id}/analyze/")
-async def analyze_property(property_id: int, analysis_request: PropertyAnalysisRequest):
-    # Perform analysis using utility functions
-    analysis_result = analyze_property_investment(
-        analysis_request.property_data,
-        analysis_request.units_data,
-        analysis_request.financing_data,
-        analysis_request.expenses_data,
-        analysis_request.tax_data
-    )
-    
-    return analysis_result
-
-# AI Agent routes
-@app.post("/ai/market-data/")
-async def get_market_data(request: MarketDataRequest, background_tasks: BackgroundTasks):
-    task_id = str(uuid.uuid4())
-    
-    # Log the available agent types for debugging
-    logger.info(f"Available agent types: {list(orchestrator.specialized_agents.keys())}")
-    
-    # Enhanced logging for market data request
-    logger.info(f"Market data request received: Location={request.location}, Property Type={request.property_type}")
-    if request.additional_filters:
-        logger.info(f"Additional filters: {json.dumps(request.additional_filters, default=str)}")
-    
-    # Log the task creation
-    logger.info(f"Creating market data task with ID: {task_id}")
-    
-    # Create task for market data agent
-    task = AgentTask(
-        task_id=task_id,
-        agent_type="market_data",
-        description=f"Get market data for {request.location}, {request.property_type}",
-        parameters={
-            "location": request.location,
-            "property_type": request.property_type,
-            "additional_filters": request.additional_filters or {}
-        }
-    )
-    
-    # Add task to orchestrator
-    logger.info(f"Adding task {task_id} to orchestrator queue")
-    orchestrator.add_task(task)
-    
-    # Log the current queue length
-    queue_size = orchestrator.task_queue.qsize() if hasattr(orchestrator.task_queue, 'qsize') else 'unknown'
-    logger.info(f"Current queue size: {queue_size}")
-    
-    # Process task in background
-    logger.info(f"Starting background processing for task {task_id}")
-    background_tasks.add_task(orchestrator.process_queue)
-    
-    return {"task_id": task_id, "status": "processing"}
-
-@app.get("/ai/tasks/{task_id}")
-async def get_task_result(task_id: str):
-    # Get the task result from the orchestrator
-    result = orchestrator.get_result(task_id)
-    
-    # Get the current task status using our new tracking system
-    task_status = orchestrator.get_task_status(task_id)
-    logger.info(f"Task {task_id} status check: {task_status}")
-    
-    if result is None:
-        # If there's no result yet, return the current status from our tracking system
-        return {"task_id": task_id, "status": task_status}
-    
-    # If we have a result, task is completed
-    return {"task_id": task_id, "status": "completed", "result": result}
-
-@app.post("/ai/rent-estimation/")
-async def estimate_rent(request: RentEstimationRequest, background_tasks: BackgroundTasks):
-    task_id = str(uuid.uuid4())
-    
-    # Create task for rent estimation agent
-    task = AgentTask(
-        task_id=task_id,
-        agent_type="rent_estimation",
-        description=f"Estimate rent for {request.size_sqm} sqm {request.property_type} in {request.location}",
-        parameters={
-            "location": request.location,
-            "property_type": request.property_type,
-            "size_sqm": request.size_sqm,
-            "num_bedrooms": request.num_bedrooms,
-            "num_bathrooms": request.num_bathrooms,
-            "features": request.features,
-            "condition": request.condition
-        }
-    )
-    
-    # Add task to orchestrator
-    orchestrator.add_task(task)
-    
-    # Process task in background
-    background_tasks.add_task(orchestrator.process_queue)
-    
-    return {"task_id": task_id, "status": "processing"}
-
-class ConversationRequest(BaseModel):
-    message: str
-    context: Optional[Dict[str, Any]] = None
-
-class ConversationResponse(BaseModel):
-    response: str
-    suggestions: Optional[List[str]] = []
-    context: Optional[Dict[str, Any]] = None
-
-@app.post("/ai/conversation/", response_model=ConversationResponse)
-async def converse(request: ConversationRequest):
+# Define routes directly in the app, not using a router
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Root endpoint that provides basic API information"""
+    return """
+    <html>
+        <head>
+            <title>Property Investment Analysis API</title>
+        </head>
+        <body>
+            <h1>Property Investment Analysis API</h1>
+            <p>Welcome to the Property Investment Analysis API.</p>
+            <p>This API provides endpoints for property investment analysis with AI agents.</p>
+            <p>The frontend UI is available at <a href="http://localhost:8501">http://localhost:8501</a>.</p>
+            <h2>Available Endpoints:</h2>
+            <ul>
+                <li><code>/health</code> - Health check endpoint</li>
+                <li><code>/ai/conversation/</code> - Converse with the AI assistant</li>
+                <li><code>/ai/conversation/stream</code> - Stream conversation with AI assistant</li>
+                <li><code>/properties/{property_id}/scenarios</code> - Get scenarios for a property</li>
+                <li><code>/scenarios/{scenario_id}</code> - Get a specific scenario</li>
+                <li><code>/scenarios/{scenario_id}/analyze</code> - Analyze a scenario</li>
+                <li><code>/scenarios/compare</code> - Compare multiple scenarios</li>
+            </ul>
+        </body>
+    </html>
     """
-    Conversational Guidance endpoint: routes user message to Manager Agent,
-    maintains context, and returns AI response with suggestions.
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "ok", "message": "API is operational"}
+
+@app.post("/ai/conversation/")
+async def converse_with_ai(
+    request: Request,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
     """
-    # Use the manager agent from orchestrator
-    manager_agent = getattr(orchestrator, "manager_agent", None)
-    if not manager_agent:
-        raise HTTPException(status_code=500, detail="Manager agent not available")
-
-    # Prepare conversation context
-    context = request.context or {}
-    user_message = request.message
-
-    # Call the manager agent's conversation method (assume async)
+    Converse with the AI assistant
+    
+    Args:
+        request: The incoming request with JSON data
+        background_tasks: Background tasks for async operations
+        db: Database session
+    
+    Returns:
+        Response from AI assistant with suggestions
+    """
     try:
-        result = await manager_agent.converse(user_message, context)
-        # result: {"response": str, "suggestions": [str], "context": {...}}
-        return ConversationResponse(
-            response=result.get("response", ""),
-            suggestions=result.get("suggestions", []),
-            context=result.get("context", context)
+        # Get request body
+        body = await request.json()
+        message = body.get("message", "")
+        context = body.get("context", {})
+        
+        # Log incoming request for debugging
+        logger.info(f"Received conversation request - message: {message[:50]}...")
+        
+        # Disable OpenAI tracing to prevent 401 errors
+        os.environ["OPENAI_AGENTS_DISABLE_TRACING"] = "1"
+        
+        # Get orchestrator
+        orchestrator = get_orchestrator()
+        
+        # Check if manager agent is initialized and initialize it if needed
+        if not orchestrator.manager_agent:
+            logger.info("Manager agent not initialized. Initializing it now...")
+            try:
+                # Initialize specialized agents if needed
+                if not orchestrator.specialized_agents:
+                    logger.info("Registering specialized agents with orchestrator")
+                    orchestrator.register_specialized_agent("market_data", create_market_data_search_agent())
+                    orchestrator.register_specialized_agent("rent_estimation", create_rent_estimation_agent())
+                    orchestrator.register_specialized_agent("document_analysis", create_document_analysis_agent())
+                    orchestrator.register_specialized_agent("optimization", create_optimization_agent())
+                    
+                    # Register the risk analysis and strategy agents that were missing
+                    logger.info("Registering risk analysis and strategy agents")
+                    orchestrator.register_specialized_agent("risk_analysis", create_risk_analysis_agent())
+                    orchestrator.register_specialized_agent("strategy", create_strategy_agent())
+                
+                # Create and register manager agent
+                logger.info("Creating and registering manager agent")
+                manager_agent = create_manager_agent(orchestrator.specialized_agents)
+                orchestrator.register_manager_agent(manager_agent)
+                logger.info("Manager agent initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize manager agent: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Could not initialize manager agent: {str(e)}")
+        
+        # Double-check that manager agent is now initialized
+        if not orchestrator.manager_agent:
+            logger.error("Manager agent initialization failed")
+            raise HTTPException(status_code=500, detail="Manager agent not initialized and could not be initialized")
+        
+        # Enhance context with additional information if needed
+        enhanced_context = {
+            "user_id": context.get("user_id"),
+            "property_id": context.get("property_id"),
+            "scenario_id": context.get("scenario_id"),
+            "session_id": context.get("session_id", "default"),
+            **context
+        }
+        
+        # Process the message through the manager agent
+        # The _manager_converse method expects the first parameter to be the message and the second to be the context
+        logger.info(f"Processing message with manager agent")
+        response = await orchestrator._manager_converse(message, enhanced_context)
+        
+        # Return structured response
+        result = {
+            "response": response.get("response", "I'm sorry, I couldn't process that request."),
+            "suggestions": response.get("suggestions", []),
+            "context": response.get("context", {}),
+        }
+        logger.info(f"Returning conversation response: {result['response'][:50]}...")
+        return JSONResponse(content=result)
+        
+    except Exception as e:
+        logger.error(f"Error in conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Conversation error: {str(e)}")
+
+@app.post("/ai/conversation/stream", response_class=StreamingResponse)
+async def stream_conversation(request: Request, db: Session = Depends(get_db)):
+    """
+    Stream conversation with AI assistant
+    
+    Args:
+        request: The incoming request with JSON data
+        db: Database session
+    
+    Returns:
+        Streaming response from AI assistant
+    """
+    try:
+        # Get request body
+        body = await request.json()
+        message = body.get("message", "")
+        context = body.get("context", {})
+        
+        # Get orchestrator
+        orchestrator = get_orchestrator()
+        if not orchestrator or not orchestrator.manager_agent:
+            raise HTTPException(status_code=500, detail="Manager agent not initialized")
+        
+        # Extract session information
+        session_id = context.get("session_id", "default")
+        
+        # Create async generator for streaming
+        async def event_generator():
+            # Initialize response chunks
+            async for chunk in orchestrator.manager_agent.stream_converse(
+                message=message,
+                context=context
+            ):
+                if chunk:
+                    # Format chunk for SSE
+                    yield json.dumps({
+                        "data": chunk.get("content", ""),
+                        "type": chunk.get("type", "content"),
+                        "done": chunk.get("done", False)
+                    })
+            
+            # Final message indicating completion
+            yield json.dumps({"data": "", "type": "content", "done": True})
+        
+        # Return streaming response
+        return EventSourceResponse(event_generator())
+        
+    except Exception as e:
+        logger.error(f"Error in streaming conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Streaming error: {str(e)}")
+
+@app.get("/properties/{property_id}/scenarios", response_model=List[Dict[str, Any]])
+async def get_scenarios(
+    property_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all scenarios for a property
+    
+    Args:
+        property_id: ID of the property
+        db: Database session
+    
+    Returns:
+        List of scenarios
+    """
+    try:
+        scenarios = db.query(Scenario).filter(Scenario.property_id == property_id).all()
+        
+        # Convert to dict with formatted results
+        result = []
+        for scenario in scenarios:
+            scenario_dict = {
+                "id": scenario.id,
+                "name": scenario.name,
+                "description": scenario.description,
+                "is_baseline": scenario.is_baseline,
+                "status": scenario.status,
+                "created_at": scenario.created_at.isoformat(),
+                "updated_at": scenario.updated_at.isoformat(),
+                "financing_params": scenario.financing_params,
+                "rental_params": scenario.rental_params,
+                "expense_params": scenario.expense_params,
+                "results": scenario.results,
+                "warnings": scenario.warnings
+            }
+            result.append(scenario_dict)
+            
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error retrieving scenarios: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Could not retrieve scenarios: {str(e)}")
+
+@app.post("/properties/{property_id}/scenarios", response_model=Dict[str, Any])
+async def create_scenario(
+    property_id: int,
+    scenario_data: Dict[str, Any] = Body(...),
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new scenario for a property
+    
+    Args:
+        property_id: ID of the property
+        scenario_data: Scenario data
+        background_tasks: Background tasks for async operations
+        db: Database session
+    
+    Returns:
+        Created scenario
+    """
+    try:
+        # Verify property exists
+        property_obj = db.query(Property).filter(Property.id == property_id).first()
+        if not property_obj:
+            raise HTTPException(status_code=404, detail="Property not found")
+        
+        # Create new scenario
+        new_scenario = Scenario(
+            property_id=property_id,
+            user_id=property_obj.user_id,
+            name=scenario_data.get("name", "New Scenario"),
+            description=scenario_data.get("description", ""),
+            is_baseline=scenario_data.get("is_baseline", False),
+            financing_params=scenario_data.get("financing_params", {}),
+            rental_params=scenario_data.get("rental_params", {}),
+            expense_params=scenario_data.get("expense_params", {})
+        )
+        
+        # Add to database
+        db.add(new_scenario)
+        db.commit()
+        db.refresh(new_scenario)
+        
+        # If this is set as baseline, update other scenarios
+        if new_scenario.is_baseline:
+            other_scenarios = db.query(Scenario).filter(
+                Scenario.property_id == property_id,
+                Scenario.id != new_scenario.id
+            ).all()
+            
+            for scenario in other_scenarios:
+                scenario.is_baseline = False
+            
+            db.commit()
+        
+        # Schedule analysis in background if needed
+        if background_tasks and scenario_data.get("run_analysis", False):
+            background_tasks.add_task(
+                analyze_scenario_background,
+                scenario_id=new_scenario.id,
+                db=db
+            )
+        
+        # Return created scenario
+        return {
+            "id": new_scenario.id,
+            "name": new_scenario.name,
+            "description": new_scenario.description,
+            "is_baseline": new_scenario.is_baseline,
+            "status": new_scenario.status,
+            "created_at": new_scenario.created_at.isoformat(),
+            "updated_at": new_scenario.updated_at.isoformat(),
+            "financing_params": new_scenario.financing_params,
+            "rental_params": new_scenario.rental_params,
+            "expense_params": new_scenario.expense_params,
+            "results": new_scenario.results,
+            "warnings": new_scenario.warnings
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating scenario: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Could not create scenario: {str(e)}")
+
+@app.get("/scenarios/{scenario_id}", response_model=Dict[str, Any])
+async def get_scenario(
+    scenario_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a specific scenario
+    
+    Args:
+        scenario_id: ID of the scenario
+        db: Database session
+    
+    Returns:
+        Scenario details
+    """
+    try:
+        scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+        if not scenario:
+            raise HTTPException(status_code=404, detail="Scenario not found")
+        
+        # Return scenario data
+        return {
+            "id": scenario.id,
+            "property_id": scenario.property_id,
+            "name": scenario.name,
+            "description": scenario.description,
+            "is_baseline": scenario.is_baseline,
+            "status": scenario.status,
+            "created_at": scenario.created_at.isoformat(),
+            "updated_at": scenario.updated_at.isoformat(),
+            "financing_params": scenario.financing_params,
+            "rental_params": scenario.rental_params,
+            "expense_params": scenario.expense_params,
+            "results": scenario.results,
+            "warnings": scenario.warnings
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving scenario: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Could not retrieve scenario: {str(e)}")
+
+@app.post("/scenarios/{scenario_id}/analyze", response_model=Dict[str, Any])
+async def analyze_scenario(
+    scenario_id: int,
+    analysis_params: Dict[str, Any] = Body({}),
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Analyze a scenario
+    
+    Args:
+        scenario_id: ID of the scenario
+        analysis_params: Analysis parameters
+        background_tasks: Background tasks for async operations
+        db: Database session
+    
+    Returns:
+        Analysis results or status
+    """
+    try:
+        # Verify scenario exists
+        scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+        if not scenario:
+            raise HTTPException(status_code=404, detail="Scenario not found")
+        
+        # Check if running in background
+        run_in_background = analysis_params.get("run_in_background", True)
+        
+        if run_in_background and background_tasks:
+            # Schedule analysis in background
+            background_tasks.add_task(
+                analyze_scenario_background,
+                scenario_id=scenario_id,
+                db=db
+            )
+            
+            return {
+                "status": "analyzing",
+                "message": "Analysis started in background",
+                "scenario_id": scenario_id
+            }
+        else:
+            # Run analysis synchronously
+            orchestrator = get_orchestrator()
+            if not orchestrator:
+                raise HTTPException(status_code=500, detail="Agent orchestrator not initialized")
+            
+            # Get property details
+            property_obj = db.query(Property).filter(Property.id == scenario.property_id).first()
+            if not property_obj:
+                raise HTTPException(status_code=404, detail="Property not found")
+            
+            # Prepare analysis context
+            analysis_context = {
+                "scenario_id": scenario_id,
+                "property_id": scenario.property_id,
+                "user_id": scenario.user_id,
+                "financing_params": scenario.financing_params,
+                "rental_params": scenario.rental_params,
+                "expense_params": scenario.expense_params,
+                "property_details": property_obj.property_details,
+                **analysis_params
+            }
+            
+            # Run analysis
+            results = await orchestrator.run_analysis(analysis_context)
+            
+            # Update scenario with results
+            scenario.results = results.get("results", {})
+            scenario.warnings = results.get("warnings", [])
+            scenario.updated_at = datetime.utcnow()
+            db.commit()
+            
+            # Return results
+            return {
+                "status": "completed",
+                "message": "Analysis completed",
+                "scenario_id": scenario_id,
+                "results": results.get("results", {}),
+                "warnings": results.get("warnings", [])
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing scenario: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Could not analyze scenario: {str(e)}")
+
+@app.get("/scenarios/compare", response_model=Dict[str, Any])
+async def compare_scenarios(
+    scenario_ids: List[int] = Query(..., description="List of scenario IDs to compare"),
+    db: Session = Depends(get_db)
+):
+    """
+    Compare multiple scenarios
+    
+    Args:
+        scenario_ids: List of scenario IDs to compare
+        db: Database session
+    
+    Returns:
+        Comparison results with metrics and AI-generated insights
+    """
+    try:
+        # Verify scenarios exist and belong to the same property
+        scenarios = db.query(Scenario).filter(Scenario.id.in_(scenario_ids)).all()
+        
+        if len(scenarios) != len(scenario_ids):
+            raise HTTPException(status_code=404, detail="One or more scenarios not found")
+        
+        # Check if all scenarios belong to the same property
+        property_ids = set(s.property_id for s in scenarios)
+        if len(property_ids) > 1:
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot compare scenarios from different properties"
+            )
+        
+        # Get orchestrator for comparison
+        orchestrator = get_orchestrator()
+        if not orchestrator:
+            raise HTTPException(status_code=500, detail="Agent orchestrator not initialized")
+        
+        # Prepare comparison context
+        scenario_data = []
+        for scenario in scenarios:
+            scenario_data.append({
+                "id": scenario.id,
+                "name": scenario.name,
+                "financing_params": scenario.financing_params,
+                "rental_params": scenario.rental_params,
+                "expense_params": scenario.expense_params,
+                "results": scenario.results,
+            })
+        
+        # Run comparison analysis
+        comparison_results = await orchestrator.run_comparison({
+            "scenarios": scenario_data,
+            "property_id": scenarios[0].property_id,
+            "user_id": scenarios[0].user_id
+        })
+        
+        return comparison_results
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error comparing scenarios: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Could not compare scenarios: {str(e)}")
+
+@app.get("/updates/{client_id}", response_class=EventSourceResponse)
+async def sse_updates(
+    client_id: str,
+    user_id: Optional[int] = None,
+    property_id: Optional[int] = None,
+    scenario_id: Optional[int] = None
+):
+    """
+    Server-Sent Events (SSE) endpoint for real-time updates
+    
+    Args:
+        client_id: Unique client identifier
+        user_id: Optional user ID to filter updates
+        property_id: Optional property ID to filter updates
+        scenario_id: Optional scenario ID to filter updates
+    
+    Returns:
+        SSE stream with updates
+    """
+    try:
+        return await sse_manager.subscribe(
+            client_id=client_id,
+            user_id=user_id,
+            property_id=property_id,
+            scenario_id=scenario_id
         )
     except Exception as e:
-        logger.error(f"Error in conversational guidance: {e}")
-        raise HTTPException(status_code=500, detail="AI conversation failed")
+        logger.error(f"Error setting up SSE stream: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Could not setup update stream: {str(e)}")
+
+async def analyze_scenario_background(scenario_id: int, db: Session):
+    """
+    Background task to analyze a scenario
+    
+    Args:
+        scenario_id: ID of the scenario to analyze
+        db: Database session
+    """
+    try:
+        # Get orchestrator
+        orchestrator = get_orchestrator()
+        if not orchestrator:
+            logger.error("Agent orchestrator not initialized")
+            return
+        
+        # Get scenario
+        scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+        if not scenario:
+            logger.error(f"Scenario {scenario_id} not found")
+            return
+        
+        # Get property details
+        property_obj = db.query(Property).filter(Property.id == scenario.property_id).first()
+        if not property_obj:
+            logger.error(f"Property {scenario.property_id} not found")
+            return
+        
+        # Update scenario status
+        scenario.status = "analyzing"
+        db.commit()
+        
+        # Send update that analysis has started
+        await sse_manager.send_update(
+            event_type="analysis_status",
+            data={
+                "scenario_id": scenario_id,
+                "status": "analyzing",
+                "message": "Analysis in progress"
+            },
+            user_id=scenario.user_id,
+            property_id=scenario.property_id,
+            scenario_id=scenario_id
+        )
+        
+        # Prepare analysis context
+        analysis_context = {
+            "scenario_id": scenario_id,
+            "property_id": scenario.property_id,
+            "user_id": scenario.user_id,
+            "financing_params": scenario.financing_params,
+            "rental_params": scenario.rental_params,
+            "expense_params": scenario.expense_params,
+            "property_details": property_obj.property_details
+        }
+        
+        # Run analysis
+        results = await orchestrator.run_analysis(analysis_context)
+        
+        # Update scenario with results
+        scenario.results = results.get("results", {})
+        scenario.warnings = results.get("warnings", [])
+        scenario.status = "completed"
+        scenario.updated_at = datetime.utcnow()
+        db.commit()
+        
+        # Send update that analysis is complete
+        await sse_manager.send_update(
+            event_type="analysis_complete",
+            data={
+                "scenario_id": scenario_id,
+                "status": "completed",
+                "message": "Analysis completed",
+                "results_summary": results.get("results_summary", {})
+            },
+            user_id=scenario.user_id,
+            property_id=scenario.property_id,
+            scenario_id=scenario_id
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in background analysis: {str(e)}")
+        
+        # Update scenario status
+        if scenario:
+            scenario.status = "error"
+            db.commit()
+            
+            # Send error update
+            await sse_manager.send_update(
+                event_type="analysis_error",
+                data={
+                    "scenario_id": scenario_id,
+                    "status": "error",
+                    "message": f"Analysis failed: {str(e)}"
+                },
+                user_id=scenario.user_id if scenario else None,
+                property_id=scenario.property_id if scenario else None,
+                scenario_id=scenario_id
+            )

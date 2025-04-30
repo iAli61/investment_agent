@@ -556,3 +556,94 @@ def get_agent_memory(memory_file: Optional[str] = "./agent_memory.json") -> Agen
         _agent_memory = AgentMemory(memory_file=memory_file)
     
     return _agent_memory
+
+class AgentMemoryService:
+    """Service wrapper for AgentMemory to provide additional functionality for API usage."""
+    
+    def __init__(self, memory_file: Optional[str] = "./agent_memory.json"):
+        """
+        Initialize the memory service.
+        
+        Args:
+            memory_file: Optional path to a file for persisting memory
+        """
+        self.memory = get_agent_memory(memory_file)
+        
+    def add_user_message(self, message: str, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Add a user message to memory.
+        
+        Args:
+            message: The user's message
+            user_id: Optional user ID for tracking
+            
+        Returns:
+            Dictionary with status and memory info
+        """
+        memory_record = self.memory.add_user_message(message)
+        return {
+            "status": "success",
+            "memory_id": id(memory_record),
+            "timestamp": memory_record.timestamp
+        }
+        
+    def add_agent_message(self, message: str) -> Dict[str, Any]:
+        """
+        Add an agent message to memory.
+        
+        Args:
+            message: The agent's message
+            
+        Returns:
+            Dictionary with status and memory info
+        """
+        memory_record = self.memory.add_agent_message(message)
+        return {
+            "status": "success",
+            "memory_id": id(memory_record),
+            "timestamp": memory_record.timestamp
+        }
+        
+    def get_conversation_history(self, limit: int = 10, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Get conversation history.
+        
+        Args:
+            limit: Maximum number of turns to retrieve
+            user_id: Optional user ID for filtering
+            
+        Returns:
+            List of conversation turns
+        """
+        return self.memory.get_conversation_history(limit=limit)
+        
+    def get_user_preferences(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get user preferences.
+        
+        Args:
+            user_id: Optional user ID for filtering
+            
+        Returns:
+            Dictionary of user preferences
+        """
+        return self.memory.get_user_preferences()
+        
+    def add_user_preference(self, key: str, value: Any, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Add or update a user preference.
+        
+        Args:
+            key: Preference key
+            value: Preference value
+            user_id: Optional user ID
+            
+        Returns:
+            Dictionary with status and preference info
+        """
+        memory_record = self.memory.add_user_preference(key, value)
+        return {
+            "status": "success",
+            "preference_key": key,
+            "timestamp": memory_record.timestamp
+        }
