@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Box from '@mui/material/Box';
+import { FormFlowProvider } from './contexts/FormFlowContext';
 
 // Import pages and layouts
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -12,6 +13,7 @@ import NewAnalysis from './pages/NewAnalysis';
 import KnowledgeBase from './pages/KnowledgeBase';
 import ChatPage from './pages/ChatPage';
 import NotFound from './pages/NotFound';
+import WelcomePage from './pages/WelcomePage';
 
 // Dark theme with blue accent colors to match UI.png
 const theme = createTheme({
@@ -83,21 +85,28 @@ const theme = createTheme({
 function App() {
   return (
     <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Router>
-        <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-          <Routes>
-            <Route path="/" element={<DashboardLayout />}>
-              <Route index element={<HomePage />} />
-              <Route path="scenarios" element={<MyScenarios />} />
-              <Route path="new-analysis" element={<NewAnalysis />} />
-              <Route path="knowledge-base" element={<KnowledgeBase />} />
-              <Route path="chat" element={<ChatPage />} />
+      <FormFlowProvider>
+        <CssBaseline />
+        <Router>
+          <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+            <Routes>
+              {/* Welcome screen */}
+              <Route path="/" element={<WelcomePage />} />
+              {/* Application routes */}
+              <Route path="app" element={<DashboardLayout />}>
+                <Route index element={<HomePage />} />
+                <Route path="scenarios" element={<MyScenarios />} />
+                <Route path="new-analysis" element={<NewAnalysis />} />
+                <Route path="knowledge-base" element={<KnowledgeBase />} />
+                <Route path="chat" element={<ChatPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Route>
+              {/* Fallback for unknown paths */}
               <Route path="*" element={<NotFound />} />
-            </Route>
-          </Routes>
-        </Box>
-      </Router>
+            </Routes>
+          </Box>
+        </Router>
+      </FormFlowProvider>
     </ThemeProvider>
   );
 }
