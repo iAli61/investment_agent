@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -6,7 +6,7 @@ import Box from '@mui/material/Box';
 import { FormFlowProvider } from './contexts/FormFlowContext';
 
 // Import pages and layouts
-import DashboardLayout from './components/layout/DashboardLayout';
+import MainLayout from './components/layout/MainLayout';
 import HomePage from './pages/HomePage';
 import MyScenarios from './pages/MyScenarios';
 import NewAnalysis from './pages/NewAnalysis';
@@ -90,10 +90,12 @@ function App() {
         <Router>
           <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
             <Routes>
-              {/* Welcome screen */}
-              <Route path="/" element={<WelcomePage />} />
-              {/* Application routes */}
-              <Route path="app" element={<DashboardLayout />}>
+              {/* Welcome screen with its own layout */}
+              <Route path="/" element={<MainLayout />}>
+                <Route index element={<WelcomePage />} />
+              </Route>
+              {/* Application routes with MainLayout */}
+              <Route path="app" element={<MainLayout />}>
                 <Route index element={<HomePage />} />
                 <Route path="scenarios" element={<MyScenarios />} />
                 <Route path="new-analysis" element={<NewAnalysis />} />

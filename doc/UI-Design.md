@@ -103,6 +103,8 @@ The main screen area dynamically displays context-relevant UI elements – focus
 
 - **Backend Communication**: Use asynchronous requests (fetch/axios) for API calls. Implement Server-Sent Events (SSE) as specified in the architecture to enable real-time dashboard updates based on input changes or background agent progress.
 
+- **Responsive Design**: Implement a fluid grid system with CSS Grid and Flexbox to ensure the UI adapts properly to different screen sizes. Define appropriate breakpoints (small, medium, large screens) with specific layout adjustments for each. Use relative units (rem, %, vh/vw) rather than fixed pixels to allow content to scale appropriately.
+
 ## 8. Wireframe Descriptions
 
 This section describes the key screens/states envisioned for the wireframing phase, illustrating the hybrid interaction model.
@@ -114,6 +116,8 @@ This section describes the key screens/states envisioned for the wireframing pha
 - **Chat Sidebar**: Shows a welcome message from the AI Assistant (e.g., "Welcome! How can I help you analyze a property today? You can start by telling me an address or click 'Start New Analysis'."). Includes the chat input field.
 
 - **Main Content Area**: Displays a welcoming graphic or introductory text. Includes prominent buttons/links like "Start New Analysis" and potentially "View My Scenarios".
+
+- **Responsive Behavior**: On smaller screens, the chat sidebar should collapse to a button that can expand when needed. The main content area should adjust proportionally to fill available space with no gaps between components. Content should be center-aligned with appropriate padding to prevent edge-touching on large screens.
 
 - **Purpose**: Onboard the user and provide clear starting points.
 
@@ -127,6 +131,8 @@ This section describes the key screens/states envisioned for the wireframing pha
 
 - **Main Content Area**: Displays a clean, simple form containing only the input field(s) requested by the AI (e.g., a single field for "Asking Price (€)"). Previously entered data (like the address) might be displayed read-only for context.
 
+- **Responsive Behavior**: Form elements should resize proportionally and stack vertically on smaller screens. Input fields should maintain minimum touch-friendly dimensions (at least 44px height) regardless of screen size.
+
 - **Purpose**: Demonstrate the focused, step-by-step data entry guided by the chat.
 
 ![alt text](image-1.png)
@@ -138,6 +144,8 @@ This section describes the key screens/states envisioned for the wireframing pha
 - **Chat Sidebar**: Shows the AI's request (e.g., "To check affordability, please provide your approximate annual income."). May include reassurances about data privacy.
 
 - **Main Content Area**: Displays a secure-looking form section for financial input (e.g., fields for "Annual Income", "Monthly Debts", "Available Savings"). May include an option/button for document upload ("Upload Pay Stub/Statement"). Input fields are clearly labeled.
+
+- **Responsive Behavior**: Financial forms should maintain structural integrity across screen sizes, with appropriate field widths and clear labeling. On smaller screens, fields stack vertically with full width.
 
 - **Purpose**: Illustrate how sensitive data is collected within the guided flow.
 
@@ -155,6 +163,8 @@ This section describes the key screens/states envisioned for the wireframing pha
   - Confidence scores or data source information
   - Clear headings indicating this is the Market/Rent analysis
 
+- **Responsive Behavior**: Dashboard metrics should reorganize from a grid to a vertical stack on smaller screens. Charts should be responsive with appropriate minimum heights and resize proportionally to container width.
+
 - **Purpose**: Show how analysis results are presented visually in the main area, complementing the chat summary.
 
 ![alt text](image-3.png)
@@ -169,6 +179,8 @@ This section describes the key screens/states envisioned for the wireframing pha
   - Key metric cards (e.g., "Estimated Max Loan", "Debt-to-Income Ratio", "Required Cash to Close")
   - A visual risk indicator or score (e.g., gauge chart, color-coded score)
   - A section listing key risk factors identified by the Risk Analysis Agent (e.g., "High DTI", "Low Savings Buffer")
+
+- **Responsive Behavior**: Risk indicators and metrics should maintain visibility and readability across screen sizes. Charts should resize proportionally with minimum dimensions to ensure readability.
 
 - **Purpose**: Demonstrate the presentation of the crucial affordability and risk assessment.
 
@@ -187,6 +199,8 @@ This section describes the key screens/states envisioned for the wireframing pha
   - Summary of key inputs (Purchase Price, Loan Amount, Interest Rate) - potentially editable directly here or via chat, triggering real-time chart updates (SSE)
   - A "Save Scenario" button
 
+- **Responsive Behavior**: Complex dashboards should use progressive disclosure on smaller screens, with the ability to expand sections for details. Charts should resize fluidly while maintaining aspect ratios appropriate for the data being visualized.
+
 - **Purpose**: Show the comprehensive, interactive results dashboard with real-time update capability.
 
 ![alt text](image-5.png)
@@ -198,6 +212,8 @@ This section describes the key screens/states envisioned for the wireframing pha
 - **Chat Sidebar**: May show a relevant message like "Here are your saved scenarios. Select one to view/edit, or select multiple to compare."
 
 - **Main Content Area**: Displays a grid or list of saved scenarios using cards. Each card shows key info (Address/Name, Date Saved, key metric like ROI or Cash Flow). Includes controls for selection (checkboxes), and actions per card (View, Edit, Duplicate, Delete). A prominent "Compare Selected" button appears when multiple scenarios are selected.
+
+- **Responsive Behavior**: Scenario cards should adjust from multi-column to single-column layouts on smaller screens. Card content should remain proportional and readable without horizontal scrolling.
 
 - **Purpose**: Illustrate the interface for managing saved analyses.
 
@@ -215,8 +231,33 @@ This section describes the key screens/states envisioned for the wireframing pha
   - Differences between values are visually highlighted (e.g., color coding, delta values)
   - Potentially includes comparative charts overlaying key metrics
 
+- **Responsive Behavior**: Comparison tables should transform to a more vertical orientation on smaller screens, potentially showing one scenario at a time with swipe/tab navigation between scenarios.
+
 - **Purpose**: Show how multiple scenarios are presented for easy comparison.
 
 ![alt text](image-7.png)
 
-This refined design proposal directly addresses the needs of novice investors by providing a guided, conversational experience that leverages the sophisticated AI agent architecture to perform the critical analysis tasks efficiently and effectively.
+## 9. Implementation Guidelines for Responsive Design
+
+### General Principles
+- **Fluid Layout**: Use CSS Grid and Flexbox for main layout structures to ensure elements resize proportionally.
+- **Breakpoints**: Implement at least three breakpoints (mobile: <768px, tablet: 768-1024px, desktop: >1024px).
+- **Component Flexibility**: All UI components should adapt to their container width rather than fixed dimensions.
+- **No Fixed Heights**: Avoid fixed height declarations that could cause overflow issues when content expands.
+- **Touch-Friendly**: Ensure all interactive elements have a minimum touch target size of 44×44px.
+
+### Specific Solutions
+- **Welcome Page Gap Fix**: Use `grid-template-rows: auto 1fr auto` with proper `min-height: 100vh` on the container to ensure the page fills the entire viewport with no gaps.
+- **Chat Sidebar**: Implement as a fixed-width element on large screens (e.g., 320px) that transforms to a drawer pattern on mobile that can be toggled.
+- **Dynamic Content Resizing**: Ensure all charts and visualizations use percentage-based dimensions with appropriate aspect ratios and min/max constraints.
+- **Overflow Handling**: Apply `overflow-x: auto` selectively only where horizontal scrolling is absolutely necessary.
+- **Text Scaling**: Use relative units (rem) for typography to respect user browser settings.
+
+### Testing Requirements
+- Test on multiple device sizes and orientations
+- Verify that no horizontal scrollbars appear unexpectedly
+- Ensure all interactive elements remain accessible at all screen sizes
+- Check that text remains readable and doesn't overflow containers
+- Verify that charts and visualizations maintain their utility at smaller sizes
+
+This enhanced responsive design approach should resolve both the welcome page gap issues and ensure proper resizing behavior across all pages of the application.
