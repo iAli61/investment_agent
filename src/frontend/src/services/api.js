@@ -2,7 +2,7 @@
  * Service for API communication
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 /**
  * Make an API request with error handling
@@ -39,77 +39,128 @@ const apiRequest = async (endpoint, options = {}) => {
  */
 const apiService = {
   /**
-   * Fetch market data for a property
-   * @param {string} location - Property location
-   * @param {string} propertyType - Type of property
-   * @returns {Promise} Market data or task ID
+   * Send a message to the AI assistant
+   * @param {string} message - User's message
+   * @param {Object} context - Conversation context (optional)
+   * @returns {Promise} AI assistant's response
    */
-  fetchMarketData: (location, propertyType) => {
-    return apiRequest('/market-data', {
+  sendMessage: (message, context = {}) => {
+    return apiRequest('/ai/conversation/', {
       method: 'POST',
-      body: JSON.stringify({ location, property_type: propertyType })
+      body: JSON.stringify({ message, context })
     });
   },
   
   /**
-   * Estimate rent for a property
-   * @param {Object} propertyData - Property details
-   * @returns {Promise} Rent estimate or task ID
+   * Create a streaming connection to the AI assistant
+   * @param {string} message - User's message
+   * @param {Object} context - Conversation context (optional)
+   * @returns {EventSource} SSE connection for streaming responses
    */
-  estimateRent: (propertyData) => {
-    return apiRequest('/rent-estimate', {
+  streamConversation: (message, context = {}) => {
+    // POST the message first
+    const postPromise = fetch(`${API_BASE_URL}/ai/conversation/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message, context })
+    });
+    
+    // Create EventSource for streaming the response
+    // This properly handles SSE protocol
+    const eventSource = new EventSource(`${API_BASE_URL}/ai/conversation/stream`);
+    
+    // Return both the eventSource and post promise for proper handling
+    return {
+      eventSource,
+      postPromise
+    };
+  },
+  
+  /**
+   * Get all properties for a user
+   * @param {number} userId - User ID
+   * @returns {Promise} List of properties
+   */
+  getProperties: (userId) => {
+    return apiRequest(`/properties?user_id=${userId}`);
+  },
+  
+  /**
+   * Get a specific property by ID
+   * @param {number} propertyId - Property ID
+   * @returns {Promise} Property details
+   */
+  getPropertyById: (propertyId) => {
+    return apiRequest(`/properties/${propertyId}`);
+  },
+  
+  /**
+   * Create a new property
+   * @param {Object} propertyData - Property details
+   * @returns {Promise} Created property
+   */
+  createProperty: (propertyData) => {
+    return apiRequest('/properties', {
       method: 'POST',
       body: JSON.stringify(propertyData)
     });
   },
   
   /**
-   * Run a comprehensive investment analysis
-   * @param {Object} analysisData - Complete property investment data
-   * @returns {Promise} Analysis results or task ID
+   * Update an existing property
+   * @param {number} propertyId - Property ID
+   * @param {Object} propertyData - Updated property data
+   * @returns {Promise} Updated property
    */
-  runInvestmentAnalysis: (analysisData) => {
-    return apiRequest('/investment-analysis', {
-      method: 'POST',
-      body: JSON.stringify(analysisData)
+  updateProperty: (propertyId, propertyData) => {
+    return apiRequest(`/properties/${propertyId}`, {
+      method: 'PUT',
+      body: JSON.stringify(propertyData)
     });
   },
   
   /**
-   * Get risk assessment for an investment
-   * @param {Object} investmentData - Investment details
-   * @returns {Promise} Risk assessment data or task ID
+   * Delete a property
+   * @param {number} propertyId - Property ID
+   * @returns {Promise} Success message
    */
-  getRiskAssessment: (investmentData) => {
-    return apiRequest('/risk-assessment', {
-      method: 'POST',
-      body: JSON.stringify(investmentData)
+  deleteProperty: (propertyId) => {
+    return apiRequest(`/properties/${propertyId}`, {
+      method: 'DELETE'
     });
   },
   
   /**
-   * Save an investment scenario
-   * @param {Object} scenarioData - Complete scenario data
-   * @returns {Promise} Saved scenario with ID
-   */
-  saveScenario: (scenarioData) => {
-    return apiRequest('/scenarios', {
-      method: 'POST',
-      body: JSON.stringify(scenarioData)
-    });
-  },
-  
-  /**
-   * Get all saved scenarios
+   * Get scenarios for a specific property
+   * @param {number} propertyId - Property ID
    * @returns {Promise} List of scenarios
    */
-  getScenarios: () => {
-    return apiRequest('/scenarios');
+  getPropertyScenarios: (propertyId) => {
+    return apiRequest(`/properties/${propertyId}/scenarios`);
+  },
+  
+  /**
+   * Create a new scenario for a property
+   * @param {number} propertyId - Property ID
+   * @param {Object} scenarioData - Scenario data
+   * @param {boolean} runAnalysis - Whether to run analysis immediately
+   * @returns {Promise} Created scenario
+   */
+  createPropertyScenario: (propertyId, scenarioData, runAnalysis = false) => {
+    return apiRequest(`/properties/${propertyId}/scenarios`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...scenarioData,
+        run_analysis: runAnalysis
+      })
+    });
   },
   
   /**
    * Get a specific scenario by ID
-   * @param {string} scenarioId - Scenario ID
+   * @param {number} scenarioId - Scenario ID
    * @returns {Promise} Scenario data
    */
   getScenarioById: (scenarioId) => {
@@ -118,7 +169,7 @@ const apiService = {
   
   /**
    * Update an existing scenario
-   * @param {string} scenarioId - Scenario ID
+   * @param {number} scenarioId - Scenario ID
    * @param {Object} scenarioData - Updated scenario data
    * @returns {Promise} Updated scenario
    */
@@ -131,7 +182,7 @@ const apiService = {
   
   /**
    * Delete a scenario
-   * @param {string} scenarioId - Scenario ID
+   * @param {number} scenarioId - Scenario ID
    * @returns {Promise} Success message
    */
   deleteScenario: (scenarioId) => {
@@ -141,24 +192,63 @@ const apiService = {
   },
   
   /**
+   * Run analysis on a scenario
+   * @param {number} scenarioId - Scenario ID
+   * @param {Object} analysisParams - Analysis parameters
+   * @param {boolean} runInBackground - Whether to run in background
+   * @returns {Promise} Analysis results or status
+   */
+  analyzeScenario: (scenarioId, analysisParams = {}, runInBackground = true) => {
+    return apiRequest(`/scenarios/${scenarioId}/analyze`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...analysisParams,
+        run_in_background: runInBackground
+      })
+    });
+  },
+  
+  /**
    * Compare multiple scenarios
    * @param {Array} scenarioIds - Array of scenario IDs to compare
    * @returns {Promise} Comparison data
    */
   compareScenarios: (scenarioIds) => {
-    return apiRequest('/scenarios/compare', {
-      method: 'POST',
-      body: JSON.stringify({ scenario_ids: scenarioIds })
-    });
+    // Use query parameter for GET request with array
+    const scenarioIdsParam = scenarioIds.join(',');
+    return apiRequest(`/scenarios/compare?scenario_ids=${scenarioIdsParam}`);
   },
   
   /**
-   * Get the result of an asynchronous task
-   * @param {string} taskId - Task ID
-   * @returns {Promise} Task result or status
+   * Subscribe to real-time updates via SSE
+   * @param {string} clientId - Unique client identifier
+   * @param {Object} params - Optional parameters (user_id, property_id, scenario_id)
+   * @returns {EventSource} SSE connection for updates
    */
-  getTaskResult: (taskId) => {
-    return apiRequest(`/tasks/${taskId}`);
+  subscribeToUpdates: (clientId, params = {}) => {
+    const { userId, propertyId, scenarioId } = params;
+    
+    let url = `${API_BASE_URL}/updates/${clientId}`;
+    
+    // Add optional query parameters
+    const queryParams = [];
+    if (userId) queryParams.push(`user_id=${userId}`);
+    if (propertyId) queryParams.push(`property_id=${propertyId}`);
+    if (scenarioId) queryParams.push(`scenario_id=${scenarioId}`);
+    
+    if (queryParams.length > 0) {
+      url = `${url}?${queryParams.join('&')}`;
+    }
+    
+    return new EventSource(url);
+  },
+  
+  /**
+   * Get health status of the API
+   * @returns {Promise} Health status
+   */
+  getHealthStatus: () => {
+    return apiRequest('/health');
   }
 };
 

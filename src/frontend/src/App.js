@@ -10,6 +10,7 @@ import HomePage from './pages/HomePage';
 import MyScenarios from './pages/MyScenarios';
 import NewAnalysis from './pages/NewAnalysis';
 import KnowledgeBase from './pages/KnowledgeBase';
+import ChatPage from './pages/ChatPage';
 import NotFound from './pages/NotFound';
 
 // Dark theme with blue accent colors to match UI.png
@@ -91,6 +92,7 @@ function App() {
               <Route path="scenarios" element={<MyScenarios />} />
               <Route path="new-analysis" element={<NewAnalysis />} />
               <Route path="knowledge-base" element={<KnowledgeBase />} />
+              <Route path="chat" element={<ChatPage />} />
               <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
