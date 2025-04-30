@@ -3,12 +3,11 @@ import {
   Box, 
   Typography, 
   Avatar, 
-  Paper,
-  Divider,
   CircularProgress
 } from '@mui/material';
 import ChatMessageList from './ChatMessageList';
 import ChatInput from './ChatInput';
+import apiService from '../../services/api';
 
 const ChatSidebar = () => {
   const [messages, setMessages] = useState([
@@ -20,6 +19,8 @@ const ChatSidebar = () => {
     }
   ]);
   const [isTyping, setIsTyping] = useState(false);
+  // Conversation context from backend
+  const [context, setContext] = useState({});
   const messagesEndRef = useRef(null);
 
   // Auto-scroll to the bottom when new messages arrive
@@ -30,7 +31,7 @@ const ChatSidebar = () => {
   // Handle sending a new message
   const handleSendMessage = async (message) => {
     if (!message.trim()) return;
-    
+
     // Add user message to chat
     const userMessage = {
       id: messages.length + 1,
@@ -38,42 +39,24 @@ const ChatSidebar = () => {
       content: message,
       timestamp: new Date(),
     };
-    setMessages([...messages, userMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setIsTyping(true);
 
     try {
-      // In a real implementation, this would call your backend API
-      // For now, simulate a response with a timeout
-      setTimeout(() => {
-        let response;
-        
-        // Simple rule-based responses for demonstration
-        if (message.toLowerCase().includes('analyze property') || message.toLowerCase().includes('new analysis')) {
-          response = "Great! I'll help you analyze a property. Please provide the address.";
-        } else if (message.toLowerCase().includes('123 main')) {
-          response = "Great! I'll help you analyze 123 Main Street, Boston, MA. I see it's listed for $450,000. I'll gather the market data and rental estimates. Please see the dashboard for details.";
-        } else if (message.toLowerCase().includes('rental') || message.toLowerCase().includes('rent')) {
-          response = "Based on comparable properties, the potential monthly rent for this property is around $2,800. This is slightly above the area average.";
-        } else if (message.toLowerCase().includes('market')) {
-          response = "The market in this area is strong. Property values have increased 3.5% over the past 6 months, and rental demand is high with a vacancy rate of only 5%.";
-        } else if (message.toLowerCase().includes('return') || message.toLowerCase().includes('roi')) {
-          response = "The projected ROI for this property is 12.7%, with a Cap Rate of 5.2% and Cash-on-Cash Return of 8.4%. These are solid numbers for this market.";
-        } else {
-          response = "I understand. What specific information would you like to know about property investments?";
-        }
-
-        const assistantMessage = {
-          id: messages.length + 2,
-          role: 'assistant',
-          content: response,
-          timestamp: new Date(),
-        };
-        
-        setMessages(prevMessages => [...prevMessages, assistantMessage]);
-        setIsTyping(false);
-      }, 1500);
+      // Send message to backend AI conversation endpoint with context
+      const result = await apiService.sendMessage(message, context);
+      const assistantMessage = {
+        id: userMessage.id + 1,
+        role: 'assistant',
+        content: result.response || 'I\'m sorry, I couldn\'t process that request.',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+      // Update context for next calls
+      if (result.context) setContext(result.context);
     } catch (error) {
       console.error('Error sending message:', error);
+    } finally {
       setIsTyping(false);
     }
   };
@@ -158,7 +141,7 @@ const ChatSidebar = () => {
           borderColor: 'divider',
         }}
       >
-        <ChatInput onSendMessage={handleSendMessage} />
+        <ChatInput onSendMessage={handleSendMessage} loading={isTyping} />
       </Box>
     </Box>
   );

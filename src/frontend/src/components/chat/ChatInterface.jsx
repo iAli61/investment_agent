@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Box, 
   TextField, 
-  Button, 
   Typography, 
   Paper, 
   CircularProgress,
@@ -19,7 +18,7 @@ import apiService from '../../services/api';
  * @param {Function} props.onContextUpdate - Callback to update context
  * @param {boolean} props.useStreaming - Whether to use streaming for responses
  */
-const ChatInterface = ({ context, onContextUpdate, useStreaming = true }) => {
+const ChatInterface = ({ context, onContextUpdate, useStreaming = false }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
